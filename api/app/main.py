@@ -7,8 +7,9 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
-from . import compute, curves, hazard, portfolio
+from . import analyst, compute, curves, hazard, portfolio, tiles
 
 log = logging.getLogger("alphaclimate")
 
@@ -23,9 +24,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+app.include_router(tiles.router)
 
 
 def _parse_assumptions(raw: str | None) -> dict | None:
@@ -50,6 +53,7 @@ def health() -> dict:
         "hazard_points_cached": st.get("cached", 0),
         "curves_loaded": len(curves.curves()),
         "curve_gaps": len(curves.gaps()),
+        "analyst": analyst.status(),
         "assets": len(portfolio.DEMO_ASSETS),
         "detail": st.get("reason"),
     }
@@ -80,6 +84,30 @@ def asset(
     if detail is None:
         raise HTTPException(404, f"No asset '{asset_id}'.")
     return detail
+
+
+class AskBody(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    scenario: str = "ssp585"
+
+
+@app.post("/api/analyst/ask")
+def analyst_ask(body: AskBody) -> dict:
+    """Explain a computed run. The model may never state an untraceable number."""
+    if body.scenario not in {s["id"] for s in hazard.scenarios()}:
+        raise HTTPException(400, f"Unknown scenario '{body.scenario}'.")
+    run = compute.summary(body.scenario)
+    try:
+        return analyst.ask(body.question, run)
+    except analyst.AnalystUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/analyst/status")
+def analyst_status() -> dict:
+    return analyst.status()
 
 
 @app.get("/api/curves/gaps")

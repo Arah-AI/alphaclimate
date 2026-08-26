@@ -148,19 +148,6 @@ OED_LOC_FIELDS = {
 # Any of these present means the file is OED rather than a generic CSV.
 OED_MARKERS = ("locnumber", "buildingtiv", "occupancycode", "locperilscovered")
 
-GENERIC_FIELDS = {
-    "name": ("name", "asset name"),
-    "lat": ("latitude", "decimal degrees"),
-    "lon": ("longitude", "decimal degrees"),
-    "value": ("value", "asset value in the portfolio currency"),
-    "sector": ("sector", "free text, mapped to a damage-curve occupancy class"),
-    "country": ("country", "free text, reported as-is"),
-    "id": ("id", "optional; derived from the name when absent"),
-    "annual_revenue": ("annual_revenue", "optional"),
-    "debt": ("debt", "optional"),
-    "annual_debt_service": ("annual_debt_service", "optional"),
-}
-
 # Column aliases for the generic CSV. Deliberately short: a file that needs
 # more aliases than this should be exported as OED.
 GENERIC_ALIASES = {
@@ -1048,6 +1035,13 @@ def demo() -> None:
     # -- format detection ----------------------------------------------------
     assert detect_format(["LocNumber", "CountryCode"]) == "oed"
     assert detect_format(["name", "lat", "lon"]) == "generic"
+
+    # -- the documented OED field table must match what the parser reads -----
+    # Drift here is how a schema table becomes a lie: a field listed as
+    # supported that nothing looks at.
+    src = open(os.path.abspath(__file__)).read()
+    for f in OED_LOC_FIELDS:
+        assert src.count(f'"{f}"') >= 2, f"{f} is documented but never read"
 
     # -- the good generic file -----------------------------------------------
     g = parse(_GOOD_GENERIC.encode(), "generic.csv")

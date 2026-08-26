@@ -27,6 +27,7 @@ import {
 import { LeadBlock, NotModelled, ScenarioBar } from "@/components/landing";
 import { Analyst } from "@/components/Analyst";
 import { MapView } from "@/components/MapView";
+import { UploadView } from "@/components/UploadView";
 import { getSummary } from "@/lib/api";
 import { getCurveGaps, isApiFailure, type CurveGaps } from "@/lib/insight";
 import type { Assumptions, Summary } from "@/lib/types";
@@ -550,6 +551,8 @@ export default function Page() {
         {!error && view === "assets" && data && (
           <AssetsView data={data} onOpen={setOpenAsset} />
         )}
+        {!error && view === "upload" && <UploadView />}
+
         {!error && view === "map" && data && (
           <MapView data={data} onOpenAsset={setOpenAsset} />
         )}
@@ -600,6 +603,7 @@ export default function Page() {
 const VIEW_TITLE: Record<ViewId, string> = {
   dashboard: "Portfolio climate risk",
   assets: "Assets",
+  upload: "Upload a portfolio",
   map: "Hazard map",
   disagreement: "Model disagreement",
   adaptation: "Adaptation options",

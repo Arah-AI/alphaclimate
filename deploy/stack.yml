@@ -1,13 +1,13 @@
 # Docker Swarm stack for the tradevantage box (Dokploy's swarm + Traefik).
-# Images are built for linux/amd64 on a workstation and shipped with
-# docker save | ssh docker load, so no registry credentials are needed and the
-# code never lands in a public image.
-# This host has ~1.3 GB free and a Next build would OOM on it.
+# Images are built by GitHub Actions on a native amd64 runner and published to
+# GHCR. This host cannot build them: it runs the live TradeVantage services in
+# ~3.8 GB with roughly 1.3 GB free, and a Next build there gets OOM-killed.
+# Memory limits below are ceilings so this stack can never starve those.
 version: "3.8"
 
 services:
   api:
-    image: alphaclimate-api:latest
+    image: ghcr.io/rafieamandio/alphaclimate-api:latest
     networks: [dokploy-network]
     environment:
       ALPHACLIMATE_CURVES: /srv/data/damage_curves.json
@@ -19,7 +19,7 @@ services:
         limits: { memory: 512M }
 
   web:
-    image: alphaclimate-web:latest
+    image: ghcr.io/rafieamandio/alphaclimate-web:latest
     networks: [dokploy-network]
     environment:
       API_URL: http://api:8000

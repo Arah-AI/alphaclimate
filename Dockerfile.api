@@ -4,9 +4,14 @@ WORKDIR /srv
 COPY api/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY api/app ./app
+# Uploaded portfolios are not in the warmed cache, so ingest reads the public
+# zarr live. Both of these are on that path.
+COPY probe_hazard.py ./probe_hazard.py
+COPY scripts ./scripts
 COPY data/damage_curves.json ./data/damage_curves.json
 COPY data/hazard_cache.json ./data/hazard_cache.json
 ENV ALPHACLIMATE_CURVES=/srv/data/damage_curves.json \
-    ALPHACLIMATE_HAZARD_CACHE=/srv/data/hazard_cache.json
+    ALPHACLIMATE_HAZARD_CACHE=/srv/data/hazard_cache.json \
+    PYTHONPATH=/srv
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

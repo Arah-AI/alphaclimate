@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from . import analyst, compute, curves, hazard, portfolio, tiles
+from . import analyst, compute, curves, hazard, portfolio
 
 log = logging.getLogger("alphaclimate")
 
@@ -28,7 +28,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(tiles.router)
+# Routers are mounted individually and defensively. supplychain and climate
+# pull in heavy scientific stacks (pymrio brings pyarrow, FaIR brings scipy and
+# downloads ~74 MB of RCMIP data on first call), and the deploy target is a VPS
+# with about 1.3 GB free that is already running production services. A router
+# that cannot import must cost one endpoint, not the whole API.
+_MOUNTED: list[str] = []
+_UNAVAILABLE: dict[str, str] = {}
+
+for _name in ("tiles", "report", "accumulation", "optimiser",
+              "ingest", "supplychain", "climate"):
+    try:
+        _mod = __import__(f"{__package__}.{_name}", fromlist=["router"])
+        app.include_router(_mod.router)
+        _MOUNTED.append(_name)
+    except Exception as _exc:  # noqa: BLE001 - any import failure is survivable
+        _UNAVAILABLE[_name] = f"{type(_exc).__name__}: {_exc}"
+        log.warning("router %s not mounted: %s", _name, _exc)
 
 
 def _parse_assumptions(raw: str | None) -> dict | None:
@@ -54,6 +70,8 @@ def health() -> dict:
         "curves_loaded": len(curves.curves()),
         "curve_gaps": len(curves.gaps()),
         "analyst": analyst.status(),
+        "modules": _MOUNTED,
+        "modules_unavailable": _UNAVAILABLE,
         "assets": len(portfolio.DEMO_ASSETS),
         "detail": st.get("reason"),
     }

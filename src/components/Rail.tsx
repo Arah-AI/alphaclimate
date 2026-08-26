@@ -5,6 +5,7 @@ import { clsx } from "clsx";
 import {
   BarChart3,
   Building2,
+  Upload,
   GitCompareArrows,
   Globe2,
   Zap,
@@ -15,6 +16,7 @@ import {
 export type ViewId =
   | "dashboard"
   | "assets"
+  | "upload"
   | "map"
   | "disagreement"
   | "adaptation"
@@ -25,6 +27,7 @@ const GROUPS: { id: ViewId; label: string; Icon: React.ElementType }[][] = [
   [
     { id: "dashboard", label: "Dashboard", Icon: BarChart3 },
     { id: "assets", label: "Assets", Icon: Building2 },
+    { id: "upload", label: "Upload a portfolio", Icon: Upload },
     { id: "map", label: "Hazard map", Icon: Globe2 },
   ],
   [

@@ -58,6 +58,13 @@ export interface Provenance {
   curve_sources: string[];
   degraded: boolean;
   degraded_reason?: string | null;
+  aggregation?: {
+    method?: string;
+    box_degrees?: number;
+    samples_per_axis?: number;
+    why?: string;
+  };
+  scenario_substitution?: { wri?: string; note?: string } | null;
 }
 
 export interface Headline {
@@ -89,7 +96,20 @@ export interface Summary {
   provenance: Provenance;
 }
 
+export interface UnpricedHazard {
+  peril: string;
+  units: string;
+  thresholds: number[];
+  values: number[];
+  baseline: number[] | null;
+  dataset: string;
+  path: string;
+  resolution: string;
+  why_unpriced: string;
+}
+
 export interface AssetDetail {
+  unpriced_hazards: UnpricedHazard[];
   asset: {
     id: string;
     name: string;

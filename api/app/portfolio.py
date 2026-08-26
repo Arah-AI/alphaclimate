@@ -47,8 +47,12 @@ DEMO_ASSETS: list[Asset] = [
     Asset("port-klang", "Port Klang West Terminal", "Malaysia",
           101.3900, 3.0000, "Transport", "Transport", "Asia",
           395_000_000, 88_000_000, 217_250_000, 18_100_000),
-    Asset("manila-pp", "Manila Bay Power Station", "Philippines",
-          120.9500, 14.5400, "Power", "Infrastructure", "Asia",
+    # Was sited at 120.95, 14.54, which is open water in Manila Bay: the hazard
+    # grid returned nodata and the old basin-wide max was reaching across the
+    # bay to hand it 2.2 m of flood. Moved to the Limay power complex in Bataan,
+    # a real generating site on land.
+    Asset("manila-pp", "Limay Power Station", "Philippines",
+          120.6083, 14.5250, "Power", "Infrastructure", "Asia",
           520_000_000, 143_000_000, 338_000_000, 28_200_000),
     Asset("chennai-auto", "Chennai Automotive Plant", "India",
           80.2200, 13.0000, "Manufacturing", "Industrial", "Asia",

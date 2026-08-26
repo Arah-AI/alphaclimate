@@ -1,0 +1,25 @@
+# Drop into /etc/dokploy/traefik/dynamic/ on the tradevantage host.
+# Mirrors the shape Dokploy generates for its own apps.
+http:
+  routers:
+    alphaclimate-router-web:
+      rule: Host(`alphaclimate.tradevantage.gg`)
+      service: alphaclimate-service
+      middlewares:
+        - redirect-to-https
+      entryPoints:
+        - web
+    alphaclimate-router-websecure:
+      rule: Host(`alphaclimate.tradevantage.gg`)
+      service: alphaclimate-service
+      middlewares: []
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+  services:
+    alphaclimate-service:
+      loadBalancer:
+        servers:
+          - url: http://alphaclimate_web:3000
+        passHostHeader: true

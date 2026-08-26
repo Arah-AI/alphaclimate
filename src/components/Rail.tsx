@@ -6,6 +6,7 @@ import {
   BarChart3,
   Building2,
   GitCompareArrows,
+  Globe2,
   Zap,
   ScrollText,
   SlidersHorizontal,
@@ -14,6 +15,7 @@ import {
 export type ViewId =
   | "dashboard"
   | "assets"
+  | "map"
   | "disagreement"
   | "adaptation"
   | "ledger"
@@ -23,6 +25,7 @@ const GROUPS: { id: ViewId; label: string; Icon: React.ElementType }[][] = [
   [
     { id: "dashboard", label: "Dashboard", Icon: BarChart3 },
     { id: "assets", label: "Assets", Icon: Building2 },
+    { id: "map", label: "Hazard map", Icon: Globe2 },
   ],
   [
     { id: "disagreement", label: "Model disagreement", Icon: GitCompareArrows },

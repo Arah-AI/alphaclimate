@@ -31,6 +31,7 @@ import {
   AssumptionsView,
   AssetDrawer,
 } from "@/components/views";
+import { MapView } from "@/components/MapView";
 import { getSummary } from "@/lib/api";
 import type { Assumptions, Summary } from "@/lib/types";
 import {
@@ -540,6 +541,9 @@ export default function Page() {
         {!error && view === "assets" && data && (
           <AssetsView data={data} onOpen={setOpenAsset} />
         )}
+        {!error && view === "map" && data && (
+          <MapView data={data} onOpenAsset={setOpenAsset} />
+        )}
         {!error && view === "disagreement" && data && <DisagreementView data={data} />}
         {!error && view === "adaptation" && data && (
           <AdaptationView data={data} scenario={scenario} assumptions={assumptions} />
@@ -587,6 +591,7 @@ export default function Page() {
 const VIEW_TITLE: Record<ViewId, string> = {
   dashboard: "Portfolio climate risk",
   assets: "Assets",
+  map: "Hazard map",
   disagreement: "Model disagreement",
   adaptation: "Adaptation options",
   ledger: "Provenance ledger",

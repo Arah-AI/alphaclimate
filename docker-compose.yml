@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: api/Dockerfile
+      dockerfile: Dockerfile.api
     restart: unless-stopped
     environment:
       ALPHACLIMATE_CURVES: /srv/data/damage_curves.json
@@ -13,7 +13,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: web/Dockerfile
+      dockerfile: Dockerfile.web
     restart: unless-stopped
     environment:
       API_URL: http://api:8000

@@ -792,6 +792,50 @@ export function AssetDrawer({
                 ))}
               </Card>
 
+              {d.unpriced_hazards?.length > 0 && (
+                <Card>
+                  <CardHead title="Measured but not priced" />
+                  <p className="text-[12.5px] text-ink-2 mb-3 leading-relaxed">
+                    Real hazard data exists for these at this location, and no
+                    defensible damage function does. They are shown rather than
+                    omitted, so silence is not mistaken for safety. They
+                    contribute nothing to the loss numbers above.
+                  </p>
+                  {d.unpriced_hazards.map((u) => {
+                    const peak = Math.max(...u.values);
+                    const basePeak = u.baseline ? Math.max(...u.baseline) : null;
+                    return (
+                      <div
+                        key={u.peril}
+                        className="border-t border-line py-3 flex items-center justify-between gap-3 flex-wrap"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-[13.5px] font-medium">
+                            {perilLabel(u.peril)}
+                          </p>
+                          <p className="text-[11.5px] text-muted">
+                            {u.dataset} · {u.resolution}
+                          </p>
+                        </div>
+                        <span className="text-right shrink-0">
+                          <span className="block text-[13.5px] font-semibold tabular-nums">
+                            {num(peak, 1)}{" "}
+                            <span className="font-normal text-muted text-[11.5px]">
+                              {u.units}
+                            </span>
+                          </span>
+                          {basePeak !== null && (
+                            <span className="block text-[11.5px] text-muted tabular-nums">
+                              baseline {num(basePeak, 1)}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </Card>
+              )}
+
               {d.adaptation.length > 0 && (
                 <Card>
                   <CardHead title="Adaptation options" />

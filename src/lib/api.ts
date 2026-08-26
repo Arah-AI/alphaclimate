@@ -69,3 +69,47 @@ export function getHealth(): Promise<{
 }> {
   return req("/api/health");
 }
+
+/* ------------------------------------------------------------- hazard map */
+
+export interface TileLayerInfo {
+  id: string;
+  label: string;
+  units: string;
+  max_zoom: number;
+  coverage: string;
+  source: string;
+  index_label: string;
+}
+
+export interface Legend {
+  id: string;
+  label: string;
+  units: string;
+  max_zoom: number;
+  coverage: string;
+  source: string;
+  index_label: string;
+  stops: { from: number; to: number | null; color: string }[];
+  citation: string;
+}
+
+export interface MapAsset {
+  id: string;
+  name: string;
+  country: string;
+  lon: number;
+  lat: number;
+}
+
+export function getTileLayers(): Promise<{ layers: TileLayerInfo[] }> {
+  return req("/api/tiles");
+}
+
+export function getLegend(hazard: string): Promise<Legend> {
+  return req(`/api/tiles/${hazard}/legend`);
+}
+
+export function getMapAssets(): Promise<{ assets: MapAsset[] }> {
+  return req("/api/map/assets");
+}

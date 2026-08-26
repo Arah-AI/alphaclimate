@@ -79,11 +79,18 @@ def loss_curve(
     curve_y: Sequence[float],
     asset_value: float,
     calibration_range: Sequence[float] | None = None,
+    protection_rp: float | None = None,
 ) -> LossCurve:
     """Build the loss exceedance curve for one asset under one hazard.
 
     `return_periods` and `intensities` must be the same length and sorted by
     ascending return period (so ascending intensity in the normal case).
+
+    `protection_rp` is a flood standard of protection in return-period years
+    (FLOPROS). Events more frequent than the standard are held back by the
+    defence and contribute no loss. Pass None where no standard is known: the
+    asset is then treated as undefended, which is what the raw WRI layers
+    already assume.
     """
     if len(return_periods) != len(intensities):
         raise ValueError("return_periods and intensities must be the same length")
@@ -95,6 +102,13 @@ def loss_curve(
     ints = [0.0 if p[1] is None else float(p[1]) for p in pairs]
 
     fracs = [interp_damage(i, curve_x, curve_y) for i in ints]
+    # A defence built to a 1-in-N standard passes nothing through below N.
+    # ponytail: modelled as a step at the standard, so the trapezoid spanning
+    # the standard carries half a step of loss it strictly should not. That
+    # errs high, which is the right direction, and real defences do not fail
+    # as a clean step anyway.
+    if protection_rp:
+        fracs = [0.0 if rp < protection_rp else f for rp, f in zip(rps, fracs)]
     losses = [f * asset_value for f in fracs]
 
     # exceedance probability of each return period
@@ -145,6 +159,74 @@ def loss_at_return_period(lc: LossCurve, rp: float) -> float:
             w = (math.log(rp) - math.log(a)) / (math.log(b) - math.log(a))
             return la + (lb - la) * w
     return lc.losses[-1]
+
+
+# --------------------------------------------------------------------------
+# inundation regime
+# --------------------------------------------------------------------------
+
+# A flood hazard layer answers "how deep, at this exceedance probability".
+# When the shallowest, most frequent return period is already deep AND the
+# curve barely rises out to the rarest return period, the layer is not
+# describing floods at all: it is describing a pixel that is under water in the
+# baseline state. Integrating an annual expected loss over standing water
+# charges the same damage every year forever, which is the wrong quantity. The
+# right answer is a one-off write-down.
+PERMANENT_MIN_DEPTH = 0.25      # metres at the most frequent return period
+PERMANENT_FLATNESS = 1.5        # rarest depth over most-frequent depth
+
+
+@dataclass
+class Regime:
+    """Whether an inundation reading is an event distribution or standing water."""
+
+    regime: str                 # "event" | "permanent"
+    reason: str
+    baseline_depth: float       # depth at the most frequent return period
+    flatness: float             # rarest / most frequent
+
+    @property
+    def permanent(self) -> bool:
+        return self.regime == "permanent"
+
+    def as_dict(self) -> dict:
+        d = asdict(self)
+        d["permanent"] = self.permanent
+        return d
+
+
+def classify_regime(
+    return_periods: Sequence[float],
+    intensities: Sequence[float],
+) -> Regime:
+    """Classify an inundation reading. Only meaningful for depth-valued hazards."""
+    if not return_periods or not intensities:
+        return Regime("event", "no reading", 0.0, 0.0)
+
+    pairs = sorted(zip(return_periods, intensities), key=lambda p: p[0])
+    base = float(pairs[0][1] or 0.0)
+    rare = float(pairs[-1][1] or 0.0)
+
+    if base <= 0:
+        return Regime("event", "dry at the most frequent return period", base, 0.0)
+
+    flat = rare / base if base > 0 else float("inf")
+
+    if base >= PERMANENT_MIN_DEPTH and flat < PERMANENT_FLATNESS:
+        return Regime(
+            "permanent",
+            f"{base:.2f} m already present at 1 in {pairs[0][0]:.0f}, rising only "
+            f"{flat:.2f}x out to 1 in {pairs[-1][0]:.0f}: standing water, not a "
+            f"flood frequency distribution",
+            base,
+            flat,
+        )
+    return Regime(
+        "event",
+        f"depth rises {flat:.2f}x across the return-period range",
+        base,
+        flat,
+    )
 
 
 # --------------------------------------------------------------------------
@@ -265,6 +347,45 @@ def demo() -> None:
     shuffled = loss_curve([100, 10, 50, 25, 500, 250],
                           [1.5, 0.0, 0.8, 0.3, 3.4, 2.6], cx, cy, 10_000_000.0)
     assert abs(shuffled.eal - lc.eal) < 1e-6, "input order must not change the answer"
+
+    # Flood defences: a 1-in-100 standard zeroes everything more frequent than
+    # a 1-in-100 event, and must cut the EAL hard without touching the tail.
+    defended = loss_curve(rps, ints, cx, cy, 10_000_000.0, protection_rp=100)
+    assert defended.losses[:3] == [0.0, 0.0, 0.0], "sub-SOP events must be held back"
+    assert defended.losses[3:] == lc.losses[3:], "events past the SOP are unchanged"
+    assert defended.eal < 0.5 * lc.eal, "a 1-in-100 defence must cut EAL sharply"
+    assert defended.eal_tail == lc.eal_tail, "the tail sits past the SOP, untouched"
+    assert loss_curve(rps, ints, cx, cy, 1e7, protection_rp=None).eal == lc.eal, \
+        "no known standard means undefended, identical to before"
+    assert loss_curve(rps, ints, cx, cy, 1e7, protection_rp=1e6).eal == 0.0, \
+        "a standard beyond every modelled RP leaves no loss at all"
+    assert defended.eal > 0, "a 1-in-100 defence is not immunity"
+
+    # Regime classification: the Jakarta signature must read as permanent.
+    jakarta = classify_regime([2, 5, 10, 25, 50, 100, 250, 500, 1000],
+                              [1.871, 1.90, 1.94, 1.99, 2.03, 2.07, 2.11, 2.14, 2.156])
+    assert jakarta.permanent, "flat, deep curve must classify as standing water"
+    assert "standing water" in jakarta.reason
+    assert abs(jakarta.baseline_depth - 1.871) < 1e-9
+
+    # A normal flood curve must not be misread as permanent.
+    normal = classify_regime(rps, ints)
+    assert not normal.permanent, f"event curve misclassified: {normal.reason}"
+
+    # A dry asset is an event regime with no depth, never permanent.
+    dry_r = classify_regime(rps, [0.0] * 6)
+    assert not dry_r.permanent and dry_r.baseline_depth == 0.0
+
+    # Shallow but flat is NOT permanent: a few centimetres of nuisance water
+    # everywhere is not an asset sitting below sea level.
+    shallow = classify_regime([2, 1000], [0.05, 0.06])
+    assert not shallow.permanent, "shallow flat water must not trigger a write-down"
+
+    # Deep but steeply rising is a real flood distribution.
+    steep = classify_regime([2, 1000], [0.4, 3.2])
+    assert not steep.permanent, "a steep curve is an event regime"
+
+    assert classify_regime([], []).regime == "event"
 
     # Spread attribution.
     vals = [100.0, 150.0, 200.0, 260.0]

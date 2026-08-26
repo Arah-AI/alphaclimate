@@ -12,3 +12,4 @@ tsconfig.tsbuildinfo
 !.env.example
 .DS_Store
 data/_sources/
+data/portfolios/

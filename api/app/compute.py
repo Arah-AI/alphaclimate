@@ -124,6 +124,14 @@ def _asset_eal(a: pf.Asset, scenario: str, variant_rank: int, curve_rank: int) -
         reading = hz.read(a.lon, a.lat, peril, scenario, variant_rank)
         if reading is None or not reading.return_periods:
             continue
+        # Same screen as the headline path. Without it, an asset with no
+        # measured depth still picks up loss from a lower-ranked HAZUS curve
+        # whose x axis is depth above FIRST FLOOR, not above ground: its
+        # damage fraction at 0.0 is non-zero, so a dry site gets charged.
+        # The headline dropped those assets and the sweep did not, which is how
+        # a zero expected loss ended up sitting next to a non-zero spread band.
+        if max(reading.intensities) <= 0:
+            continue
         alts = curve_lib.alternates(peril, a.region, a.occupancy, limit=3)
         if not alts:
             continue

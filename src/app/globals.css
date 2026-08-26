@@ -11,11 +11,11 @@
   --color-card: #ffffff;
   --color-ink: #14161a;
   --color-ink-2: #3f454e;
-  --color-muted: #737b87;
+  --color-muted: #6a717d;   /* was #737b87: 3.95:1 on canvas, failed AA */
   --color-line: #ecEEF2;
   --color-line-2: #e2e5ea;
 
-  --color-brand: #0b6be1;
+  --color-brand: #0b69de;   /* 4.51:1 on brand-tint */
   --color-brand-600: #0959bd;
   --color-brand-soft: #aecdf5;
   --color-brand-tint: #e8f1fd;
@@ -26,11 +26,11 @@
   --color-charcoal: #16181d;
   --color-charcoal-2: #23262d;
 
-  --color-danger: #d1453b;
+  --color-danger: #c8392f;  /* 4.50:1 on its own tint */
   --color-danger-tint: #fdeceb;
-  --color-warn: #b8770f;
+  --color-warn: #9b640d;    /* was 3.36:1 on its own tint */
   --color-warn-tint: #fdf3e2;
-  --color-good: #1f8a53;
+  --color-good: #1c7e4c;    /* 4.51:1 on its own tint */
   --color-good-tint: #e6f5ed;
 
   --radius-card: 20px;
@@ -38,6 +38,22 @@
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: var(--font-playfair), Georgia, "Times New Roman", serif;
+  /* Declared so <code> stops falling through to an unmanaged per-OS mono. */
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Type ramp. rem, so a raised browser default font size actually does
+     something: every size in this app used to be px, which that setting
+     cannot touch. Six steps at a 1.12-1.19 ratio replace the eight sizes
+     that previously sat 0.5px apart and communicated nothing. */
+  --text-micro: 0.6875rem;        /* 11px  eyebrows, table headers, axis ticks */
+  --text-support: 0.78125rem;     /* 12.5px captions, sub-lines, legends */
+  --text-ui: 0.875rem;            /* 14px  default: rows, cells, buttons, labels */
+  --text-prose: 1rem;             /* 16px  reading prose, and form inputs */
+  --text-card-title: 1.1875rem;   /* 19px */
+  --text-panel-title: 1.375rem;   /* 22px */
+  --text-display-sm: 1.875rem;    /* 30px */
+  --text-display: 2.375rem;       /* 38px */
+  --text-display-lg: 2.75rem;     /* 44px */
 }
 
 html {
@@ -49,6 +65,15 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  /* Figures line up in columns all over this product. Set it once here and
+     opt out on the few prose blocks where lining figures read as stilted. */
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-prose {
+  font-variant-numeric: proportional-nums;
+  max-width: 68ch;
+  text-wrap: pretty;
 }
 
 /* Focus visibility is a baseline, never a nice-to-have. */
@@ -117,7 +142,7 @@ body {
   overflow: hidden;
 }
 .ac-map .maplibregl-ctrl-attrib {
-  font-size: 10.5px;
+  font-size: var(--text-micro);
   background: rgb(255 255 255 / 0.8);
 }
 
@@ -141,16 +166,16 @@ body {
   padding: 10px 12px;
   box-shadow: 0 6px 20px rgb(20 22 26 / 0.12);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--text-support);
   line-height: 1.45;
   color: var(--color-ink-2);
   display: flex;
   flex-direction: column;
 }
 .ac-map-popup .maplibregl-popup-content > b:first-child {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
   color: var(--color-ink);
 }
 .ac-map-popup .maplibregl-popup-tip { border-top-color: #fff; }

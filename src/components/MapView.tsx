@@ -256,7 +256,7 @@ export function MapView({
         <div className="flex flex-wrap items-center gap-3 mt-4">
           <label
             htmlFor="ac-hazard-opacity"
-            className="text-[12.5px] text-muted shrink-0"
+            className="text-support text-muted shrink-0"
           >
             Layer opacity
           </label>
@@ -272,10 +272,10 @@ export function MapView({
             aria-valuetext={pct(opacity, 0)}
             className="w-[180px] accent-[#0b6be1]"
           />
-          <span className="text-[12.5px] text-muted tabular-nums w-[42px]">
+          <span className="text-support text-muted tabular-nums w-[42px]">
             {pct(opacity, 0)}
           </span>
-          <span className="text-[12px] text-muted ml-auto">
+          <span className="text-support text-muted ml-auto">
             {rows.length} of {data.assets.length} assets placed
           </span>
         </div>
@@ -288,7 +288,7 @@ export function MapView({
             <Skeleton className="h-[180px]" />
           ) : (
             <>
-              <p className="text-[13px] text-muted mb-3">
+              <p className="text-ui text-muted mb-3">
                 {legend.label} in {legend.units}
               </p>
               <ul className="flex flex-col gap-1.5">
@@ -299,7 +299,7 @@ export function MapView({
                       className="w-[22px] h-[12px] rounded-[3px] shrink-0 border border-line-2"
                       style={{ background: s.color }}
                     />
-                    <span className="text-[12.5px] tabular-nums">
+                    <span className="text-support tabular-nums">
                       {s.to === null
                         ? `${s.from} and above`
                         : `${s.from} to ${s.to}`}
@@ -311,12 +311,12 @@ export function MapView({
                     aria-hidden
                     className="w-[22px] h-[12px] rounded-[3px] shrink-0 border border-line-2"
                   />
-                  <span className="text-[12.5px] text-muted">
+                  <span className="text-support text-muted">
                     below {legend.stops[0].from}, or not modelled
                   </span>
                 </li>
               </ul>
-              <p className="text-[12px] text-muted mt-4 leading-relaxed">
+              <p className="text-support text-muted mt-4 leading-relaxed">
                 {legend.index_label}. Coverage: {legend.coverage}. Source:{" "}
                 {legend.source}. Tiles above zoom {legend.max_zoom} are the top
                 pyramid level stretched, not extra detail.
@@ -337,14 +337,14 @@ export function MapView({
                     className="w-[11px] h-[11px] rounded-full shrink-0"
                     style={{ background: BAND_COLOR[b] }}
                   />
-                  <span className="text-[13px]">{BAND_LABEL[b]}</span>
-                  <span className="ml-auto text-[13px] font-semibold tabular-nums">
+                  <span className="text-ui">{BAND_LABEL[b]}</span>
+                  <span className="ml-auto text-ui font-semibold tabular-nums">
                     {data.headline.bands[b]}
                   </span>
                 </li>
               ))}
           </ul>
-          <p className="text-[12px] text-muted mt-4 leading-relaxed">
+          <p className="text-support text-muted mt-4 leading-relaxed">
             Circle size is expected annual loss. Select a circle to open the
             asset.
           </p>

@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { X } from "lucide-react";
-import { Card, CardHead, Chip, Skeleton, StatBig, ErrorNote, ExtrapolationFlag } from "./ui";
+import { Card, CardHead, Chip, LegendDots, Skeleton, StatBig, ErrorNote, ExtrapolationFlag } from "./ui";
+import { SpreadRail } from "./charts";
 import { getAsset } from "@/lib/api";
 import type { AssetDetail, Assumptions, Summary } from "@/lib/types";
 import {
@@ -40,7 +41,7 @@ export function AssetsView({
           onChange={(e) => setQ(e.target.value)}
           placeholder="Filter by name, country or sector"
           aria-label="Filter assets"
-          className="rounded-full border border-line-2 bg-card px-4 py-2 text-[13px] w-[280px] max-w-full placeholder:text-muted"
+          className="rounded-full border border-line-2 bg-card px-4 py-2 text-prose w-[280px] max-w-full placeholder:text-muted"
         />
       </CardHead>
 
@@ -60,7 +61,7 @@ export function AssetsView({
               ].map((th) => (
                 <th
                   key={th}
-                  className="text-[11px] uppercase tracking-[0.08em] text-muted font-semibold pb-3 pr-4 whitespace-nowrap"
+                  className="text-micro uppercase tracking-[0.1em] text-muted font-semibold pb-3 pr-4 whitespace-nowrap"
                 >
                   {th}
                 </th>
@@ -83,30 +84,30 @@ export function AssetsView({
                 className="border-t border-line cursor-pointer hover:bg-canvas transition-colors"
               >
                 <td className="py-3 pr-4">
-                  <span className="block text-[13.5px] font-medium">{a.name}</span>
-                  <span className="block text-[12px] text-muted">
+                  <span className="block text-ui font-medium">{a.name}</span>
+                  <span className="block text-support text-muted">
                     {a.country} · {a.sector}
                   </span>
                 </td>
-                <td className="py-3 pr-4 text-[13.5px] tabular-nums whitespace-nowrap">
+                <td className="py-3 pr-4 text-ui tabular-nums whitespace-nowrap">
                   {money(a.value, cur)}
                 </td>
-                <td className="py-3 pr-4 text-[13.5px] tabular-nums font-semibold whitespace-nowrap">
+                <td className="py-3 pr-4 text-ui tabular-nums font-semibold whitespace-nowrap">
                   {money(a.eal, cur)}
                 </td>
-                <td className="py-3 pr-4 text-[13.5px] tabular-nums text-muted">
+                <td className="py-3 pr-4 text-ui tabular-nums text-muted">
                   {pct(a.eal_pct, 2)}
                 </td>
-                <td className="py-3 pr-4 text-[13.5px] tabular-nums whitespace-nowrap">
+                <td className="py-3 pr-4 text-ui tabular-nums whitespace-nowrap">
                   {money(a.impairment, cur)}
                   <span className="text-muted"> ({pct(a.impairment_pct, 1)})</span>
                 </td>
-                <td className="py-3 pr-4 text-[13px] whitespace-nowrap">
+                <td className="py-3 pr-4 text-ui whitespace-nowrap">
                   {perilLabel(a.top_peril)}
                 </td>
                 <td className="py-3 pr-4">
                   <span
-                    className="inline-block rounded-full px-2.5 py-[3px] text-[11.5px] font-semibold whitespace-nowrap"
+                    className="inline-block rounded-full px-2.5 py-[3px] text-micro font-semibold whitespace-nowrap"
                     style={{
                       background: BAND_TINT[a.band],
                       color: BAND_COLOR[a.band],
@@ -117,7 +118,7 @@ export function AssetsView({
                 </td>
                 <td className="py-3 pr-1">
                   <span className="flex gap-1.5 flex-wrap">
-                    {a.covenant_breach && <Chip tone="danger">covenant</Chip>}
+                    {a.covenant_breach && <Chip tone="danger">covenant breach</Chip>}
                     {a.uninsurable && <Chip tone="warn">cover limit</Chip>}
                     {a.extrapolated && <ExtrapolationFlag />}
                   </span>
@@ -126,7 +127,7 @@ export function AssetsView({
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={8} className="py-10 text-center text-[13.5px] text-muted">
+                <td colSpan={8} className="py-10 text-center text-ui text-muted">
                   No asset matches “{q}”.
                 </td>
               </tr>
@@ -150,37 +151,34 @@ export function DisagreementView({ data }: { data: Summary }) {
         <CardHead title="Spread across every run" />
         <div className="flex items-baseline gap-3 mb-1">
           <StatBig>{s.range_ratio.toFixed(2)}x</StatBig>
-          <span className="text-[13px] text-muted">
+          <span className="text-ui text-muted">
             highest over lowest, {s.n} runs
           </span>
         </div>
 
-        <div className="mt-6 mb-3">
-          <div className="relative h-[10px] rounded-full bg-line">
-            <div
-              className="absolute h-full rounded-full bg-brand-soft"
-              style={{ left: "0%", right: "0%" }}
+        <div className="mt-8 mb-3">
+          <SpreadRail
+            low={s.low}
+            median={s.median}
+            high={s.high}
+            mark={data.headline.eal}
+            currency={cur}
+          />
+          <div className="mt-3">
+            <LegendDots
+              items={[
+                {
+                  label: "This run",
+                  color: "#16181d",
+                  value: money(data.headline.eal, cur),
+                },
+                { label: "Median of all runs", color: "#0b6be1", value: money(s.median, cur) },
+              ]}
             />
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-[3px] h-[20px] rounded-full bg-brand"
-              style={{
-                left: `${
-                  s.high > s.low
-                    ? ((s.median - s.low) / (s.high - s.low)) * 100
-                    : 50
-                }%`,
-              }}
-              title={`Median ${money(s.median, cur)}`}
-            />
-          </div>
-          <div className="flex justify-between mt-2 text-[12px] tabular-nums">
-            <span className="text-muted">{money(s.low, cur)} low</span>
-            <span className="font-semibold">{money(s.median, cur)} median</span>
-            <span className="text-muted">{money(s.high, cur)} high</span>
           </div>
         </div>
 
-        <p className="text-[13px] text-ink-2 leading-relaxed mt-4">
+        <p className="text-ui text-ink-2 leading-relaxed ac-prose mt-4">
           Every one of these answers is defensible under a published method. We do
           not average them into a single number, because the spread is the finding.
           A range ratio above 2 means the choice of model moves the answer more
@@ -196,10 +194,10 @@ export function DisagreementView({ data }: { data: Summary }) {
             .map(([k, v]) => (
               <li key={k}>
                 <div className="flex items-baseline justify-between gap-3 mb-1.5">
-                  <span className="text-[14px] font-medium capitalize">
+                  <span className="text-ui font-medium capitalize">
                     {k.replace(/_/g, " ")}
                   </span>
-                  <span className="text-[12.5px] text-muted tabular-nums">
+                  <span className="text-support text-muted tabular-nums">
                     {v.levels} variants · {money(v.range, cur)} range
                   </span>
                 </div>
@@ -210,14 +208,14 @@ export function DisagreementView({ data }: { data: Summary }) {
                       style={{ width: `${Math.min(100, v.share * 100)}%` }}
                     />
                   </span>
-                  <b className="text-[13px] tabular-nums w-[46px] text-right">
+                  <b className="text-ui tabular-nums w-[46px] text-right">
                     {pct(v.share, 0)}
                   </b>
                 </div>
               </li>
             ))}
         </ul>
-        <p className="text-[12px] text-muted mt-5 leading-relaxed">
+        <p className="text-support text-muted mt-5 leading-snug ac-prose">
           First-order attribution: each driver&apos;s share is the range of its group
           means over the total range. Shares need not sum to 100% because drivers
           interact.
@@ -266,7 +264,7 @@ export function AdaptationView({
             aria-label="Asset"
             value={sel}
             onChange={(e) => setSel(e.target.value)}
-            className="rounded-full border border-line-2 bg-card px-4 py-2 text-[13px] max-w-full"
+            className="rounded-full border border-line-2 bg-card px-4 py-2 text-prose max-w-full"
           >
             {data.assets.map((a) => (
               <option key={a.id} value={a.id}>
@@ -281,7 +279,7 @@ export function AdaptationView({
 
         {!busy && detail && (
           <>
-            <p className="text-[13.5px] text-ink-2 mb-5">
+            <p className="text-ui text-ink-2 mb-5">
               Baseline expected annual loss{" "}
               <b>{money(detail.finance.annual_physical_damage, cur)}</b>, NPV of
               climate cost <b>{money(detail.finance.npv_climate_cost, cur)}</b> over{" "}
@@ -303,7 +301,7 @@ export function AdaptationView({
                     ].map((th) => (
                       <th
                         key={th}
-                        className="text-[11px] uppercase tracking-[0.08em] text-muted font-semibold pb-3 pr-4 whitespace-nowrap"
+                        className="text-micro uppercase tracking-[0.1em] text-muted font-semibold pb-3 pr-4 whitespace-nowrap"
                       >
                         {th}
                       </th>
@@ -313,28 +311,28 @@ export function AdaptationView({
                 <tbody>
                   {detail.adaptation.map((o) => (
                     <tr key={o.name} className="border-t border-line">
-                      <td className="py-3 pr-4 text-[13.5px] font-medium">{o.name}</td>
-                      <td className="py-3 pr-4 text-[13.5px] tabular-nums">
+                      <td className="py-3 pr-4 text-ui font-medium">{o.name}</td>
+                      <td className="py-3 pr-4 text-ui tabular-nums">
                         {money(o.capex, cur)}
                       </td>
-                      <td className="py-3 pr-4 text-[13.5px] tabular-nums">
+                      <td className="py-3 pr-4 text-ui tabular-nums">
                         {pct(o.loss_reduction, 0)}
                       </td>
-                      <td className="py-3 pr-4 text-[13.5px] tabular-nums">
+                      <td className="py-3 pr-4 text-ui tabular-nums">
                         {money(o.benefit_npv, cur)}
                       </td>
                       <td
                         className={
-                          "py-3 pr-4 text-[13.5px] tabular-nums font-semibold " +
+                          "py-3 pr-4 text-ui tabular-nums font-semibold " +
                           (o.net_npv > 0 ? "text-good" : "text-danger")
                         }
                       >
                         {money(o.net_npv, cur)}
                       </td>
-                      <td className="py-3 pr-4 text-[13.5px] tabular-nums">
+                      <td className="py-3 pr-4 text-ui tabular-nums">
                         {num(o.bcr, 2)}
                       </td>
-                      <td className="py-3 pr-4 text-[13.5px] tabular-nums">
+                      <td className="py-3 pr-4 text-ui tabular-nums">
                         {o.payback_years ? `${o.payback_years} yr` : "never"}
                       </td>
                       <td className="py-3 pr-1">
@@ -359,7 +357,7 @@ export function AdaptationView({
 export function LedgerView({ data }: { data: Summary }) {
   const p = data.provenance;
   const Row = ({ k, v }: { k: string; v: React.ReactNode }) => (
-    <div className="flex flex-wrap gap-x-4 gap-y-1 py-2.5 border-t border-line text-[13.5px]">
+    <div className="flex flex-wrap gap-x-4 gap-y-1 py-2.5 border-t border-line text-ui">
       <span className="w-[190px] shrink-0 text-muted">{k}</span>
       <span className="flex-1 min-w-[200px] break-words">{v}</span>
     </div>
@@ -369,7 +367,7 @@ export function LedgerView({ data }: { data: Summary }) {
     <div className="grid gap-4 lg:grid-cols-2 items-start">
       <Card>
         <CardHead title="This run" />
-        <Row k="Run id" v={<code className="text-[12.5px]">{p.run_id}</code>} />
+        <Row k="Run id" v={<code className="text-support">{p.run_id}</code>} />
         <Row k="Computed at" v={new Date(p.computed_at).toUTCString()} />
         <Row k="Engine version" v={p.engine_version} />
         <Row k="Scenario" v={p.scenario} />
@@ -384,7 +382,7 @@ export function LedgerView({ data }: { data: Summary }) {
             )
           }
         />
-        <p className="text-[12px] text-muted mt-4 leading-relaxed">
+        <p className="text-support text-muted mt-4 leading-snug ac-prose">
           Every figure on the dashboard traces to this record. Re-running with the
           same inputs reproduces the same numbers.
         </p>
@@ -392,7 +390,7 @@ export function LedgerView({ data }: { data: Summary }) {
 
       <Card>
         <CardHead title="Data lineage" />
-        <h3 className="text-[12px] uppercase tracking-[0.08em] text-muted font-semibold mb-1 mt-1">
+        <h3 className="text-micro uppercase tracking-[0.1em] text-muted font-semibold mb-1 mt-1">
           Hazard
         </h3>
         {p.hazard_sources.length ? (
@@ -402,7 +400,7 @@ export function LedgerView({ data }: { data: Summary }) {
               k={s.dataset}
               v={
                 <>
-                  <code className="text-[12px] break-all">{s.path}</code>
+                  <code className="text-support break-all">{s.path}</code>
                   <br />
                   <span className="text-muted">
                     {s.units} · {s.resolution} · {s.citation}
@@ -412,10 +410,10 @@ export function LedgerView({ data }: { data: Summary }) {
             />
           ))
         ) : (
-          <Row k="—" v="No hazard source recorded for this run." />
+          <Row k="—" v="No hazard dataset was read for this run. Check /api/health: the engine reports itself degraded when the hazard cache cannot be loaded." />
         )}
 
-        <h3 className="text-[12px] uppercase tracking-[0.08em] text-muted font-semibold mb-1 mt-5">
+        <h3 className="text-micro uppercase tracking-[0.1em] text-muted font-semibold mb-1 mt-5">
           Vulnerability
         </h3>
         {p.curve_sources.length ? (
@@ -440,7 +438,6 @@ const FIELDS: {
   as?: "pct";
 }[] = [
   { key: "discount_rate", label: "Discount rate", help: "WACC used to present-value future losses", min: 0, max: 0.25, step: 0.005, as: "pct" },
-  { key: "horizon_years", label: "Hold period", help: "Years of losses included in the NPV", min: 1, max: 40, step: 1 },
   { key: "hazard_growth", label: "Hazard growth", help: "Annual worsening of expected loss inside the horizon", min: 0, max: 0.1, step: 0.005, as: "pct" },
   { key: "ebitda_margin", label: "EBITDA margin", help: "Used to size lost earnings during outage", min: 0, max: 1, step: 0.01, as: "pct" },
   { key: "downtime_days_per_damage_unit", label: "Downtime at total loss", help: "Days of outage at 100% damage, scaled linearly", min: 0, max: 365, step: 5 },
@@ -490,7 +487,7 @@ export function AssumptionsView({
           <button
             type="button"
             onClick={onReset}
-            className="rounded-full border border-line-2 px-4 py-2 text-[13px] font-medium hover:bg-canvas transition-colors"
+            className="rounded-full border border-line-2 px-4 py-2 text-ui font-medium hover:bg-canvas transition-colors"
           >
             Reset to defaults
           </button>
@@ -498,17 +495,19 @@ export function AssumptionsView({
             type="button"
             disabled={!dirty}
             onClick={() => onChange(draft)}
-            className="rounded-full bg-brand text-white px-4 py-2 text-[13px] font-medium disabled:opacity-40 hover:bg-brand-600 transition-colors"
+            className="rounded-full bg-brand text-white px-4 py-2 text-ui font-medium disabled:opacity-40 hover:bg-brand-600 transition-colors"
           >
             Re-run
           </button>
         </div>
       </CardHead>
 
-      <p className="text-[13.5px] text-ink-2 mb-6 max-w-[72ch]">
+      <p className="text-prose text-ink-2 mb-6 ac-prose">
         Every lever below belongs to you, not to us. Change one and the whole
         portfolio is recomputed, and the override is written into the provenance
-        ledger for this run.
+        ledger for this run. Hold period and scenario are not here: they live on the
+        run bar at the top of every view, because they change the answer often enough
+        to deserve one control everywhere.
       </p>
 
       <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -518,11 +517,11 @@ export function AssumptionsView({
           return (
             <label key={f.key} className="flex flex-col gap-1.5">
               <span className="flex items-baseline justify-between gap-2">
-                <span className="text-[13.5px] font-medium">
+                <span className="text-ui font-medium">
                   {f.label}
                   {changed && <span className="text-brand"> ·</span>}
                 </span>
-                <span className="text-[13px] tabular-nums font-semibold">
+                <span className="text-ui tabular-nums font-semibold">
                   {f.as === "pct" ? pct(v, 1) : num(v, f.step < 1 ? 2 : 0)}
                 </span>
               </span>
@@ -538,7 +537,7 @@ export function AssumptionsView({
                 }
                 className="w-full accent-[#0b6be1]"
               />
-              <span className="text-[11.5px] text-muted leading-snug">{f.help}</span>
+              <span className="text-micro text-muted leading-snug">{f.help}</span>
             </label>
           );
         })}
@@ -553,8 +552,8 @@ export function AssumptionsView({
             className="mt-1 accent-[#0b6be1] w-4 h-4"
           />
           <span>
-            <span className="block text-[13.5px] font-medium">Assume cover available</span>
-            <span className="block text-[11.5px] text-muted leading-snug">
+            <span className="block text-ui font-medium">Assume cover available</span>
+            <span className="block text-micro text-muted leading-snug">
               Switch off to see the portfolio with insurance withdrawn
             </span>
           </span>
@@ -615,10 +614,10 @@ export function AssetDrawer({
     tone?: "good" | "bad";
   }) => (
     <div className="flex items-baseline justify-between gap-3 py-2.5 border-t border-line">
-      <span className="text-[13px] text-muted">{k}</span>
+      <span className="text-ui text-muted">{k}</span>
       <span
         className={
-          "text-[13.5px] font-semibold tabular-nums text-right " +
+          "text-ui font-semibold tabular-nums text-right " +
           (tone === "bad" ? "text-danger" : tone === "good" ? "text-good" : "")
         }
       >
@@ -642,14 +641,14 @@ export function AssetDrawer({
       >
         <div className="sticky top-0 bg-canvas/95 backdrop-blur px-5 sm:px-6 py-4 flex items-start justify-between gap-4 border-b border-line">
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.1em] text-muted font-semibold">
+            <p className="text-micro uppercase tracking-[0.1em] text-muted font-semibold">
               Asset detail
             </p>
-            <h2 className="font-display text-[22px] leading-tight truncate">
+            <h2 className="font-display font-medium text-panel-title leading-tight truncate">
               {d?.asset.name ?? "Loading…"}
             </h2>
             {d && (
-              <p className="text-[12.5px] text-muted mt-0.5">
+              <p className="text-support text-muted mt-0.5">
                 {d.asset.country} · {d.asset.sector} · {d.asset.lat.toFixed(4)},{" "}
                 {d.asset.lon.toFixed(4)}
               </p>
@@ -728,7 +727,7 @@ export function AssetDrawer({
                   v={f.uninsurable_flag ? "at cover limit" : "insurable"}
                   tone={f.uninsurable_flag ? "bad" : "good"}
                 />
-                <p className="text-[11.5px] text-muted mt-3 leading-relaxed">
+                <p className="text-micro text-muted mt-3 leading-relaxed">
                   Tested against common covenant floors: DSCR 1.25x, LTV 75%.
                 </p>
               </Card>
@@ -736,25 +735,25 @@ export function AssetDrawer({
               <Card>
                 <CardHead title="Hazard and damage" />
                 {d.hazards.length === 0 && (
-                  <p className="text-[13px] text-muted">
-                    No hazard indicator returned a value at this location.
+                  <p className="text-ui text-muted">
+                    No hazard dataset covers this location. That is missing data, not an absence of risk.
                   </p>
                 )}
                 {d.hazards.map((hz) => (
                   <div key={hz.peril} className="border-t border-line pt-3.5 mt-3.5 first:border-0 first:mt-0 first:pt-0">
                     <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
-                      <h4 className="text-[14px] font-semibold">
+                      <h4 className="text-ui font-semibold">
                         {perilLabel(hz.peril)}
                       </h4>
                       <span className="flex items-center gap-2">
                         {hz.extrapolated && <ExtrapolationFlag />}
-                        <span className="text-[13px] font-semibold tabular-nums">
+                        <span className="text-ui font-semibold tabular-nums">
                           {money(hz.eal, cur)}/yr
                         </span>
                       </span>
                     </div>
                     <div className="overflow-x-auto ac-scroll">
-                      <table className="w-full min-w-[300px] text-[12.5px] tabular-nums">
+                      <table className="w-full min-w-[300px] text-support tabular-nums">
                         <thead>
                           <tr className="text-muted text-left">
                             <th className="font-medium pb-1.5 pr-3">Return period</th>
@@ -781,7 +780,7 @@ export function AssetDrawer({
                         </tbody>
                       </table>
                     </div>
-                    <p className="text-[11.5px] text-muted mt-2.5 leading-relaxed">
+                    <p className="text-micro text-muted mt-2.5 leading-relaxed">
                       Curve <code>{hz.curve_id}</code> · {hz.curve_source} ·
                       confidence {hz.curve_confidence}
                       <br />
@@ -795,7 +794,7 @@ export function AssetDrawer({
               {d.unpriced_hazards?.length > 0 && (
                 <Card>
                   <CardHead title="Measured but not priced" />
-                  <p className="text-[12.5px] text-ink-2 mb-3 leading-relaxed">
+                  <p className="text-ui text-ink-2 mb-3 leading-relaxed ac-prose">
                     Real hazard data exists for these at this location, and no
                     defensible damage function does. They are shown rather than
                     omitted, so silence is not mistaken for safety. They
@@ -810,22 +809,22 @@ export function AssetDrawer({
                         className="border-t border-line py-3 flex items-center justify-between gap-3 flex-wrap"
                       >
                         <div className="min-w-0">
-                          <p className="text-[13.5px] font-medium">
+                          <p className="text-ui font-medium">
                             {perilLabel(u.peril)}
                           </p>
-                          <p className="text-[11.5px] text-muted">
+                          <p className="text-micro text-muted">
                             {u.dataset} · {u.resolution}
                           </p>
                         </div>
                         <span className="text-right shrink-0">
-                          <span className="block text-[13.5px] font-semibold tabular-nums">
+                          <span className="block text-ui font-semibold tabular-nums">
                             {num(peak, 1)}{" "}
-                            <span className="font-normal text-muted text-[11.5px]">
+                            <span className="font-normal text-muted text-micro">
                               {u.units}
                             </span>
                           </span>
                           {basePeak !== null && (
-                            <span className="block text-[11.5px] text-muted tabular-nums">
+                            <span className="block text-micro text-muted tabular-nums">
                               baseline {num(basePeak, 1)}
                             </span>
                           )}
@@ -845,8 +844,8 @@ export function AssetDrawer({
                       className="border-t border-line py-3 flex items-center justify-between gap-3 flex-wrap"
                     >
                       <div className="min-w-0">
-                        <p className="text-[13.5px] font-medium">{o.name}</p>
-                        <p className="text-[12px] text-muted">
+                        <p className="text-ui font-medium">{o.name}</p>
+                        <p className="text-support text-muted">
                           {money(o.capex, cur)} capex · cuts loss {pct(o.loss_reduction, 0)}
                           {o.payback_years ? ` · ${o.payback_years} yr payback` : ""}
                         </p>
@@ -854,7 +853,7 @@ export function AssetDrawer({
                       <span className="flex items-center gap-2 shrink-0">
                         <span
                           className={
-                            "text-[13.5px] font-semibold tabular-nums " +
+                            "text-ui font-semibold tabular-nums " +
                             (o.net_npv > 0 ? "text-good" : "text-danger")
                           }
                         >

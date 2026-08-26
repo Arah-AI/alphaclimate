@@ -85,7 +85,7 @@ export function Rail({
                 <Icon size={19} strokeWidth={active ? 2.2 : 1.9} aria-hidden />
                 {id === "assets" && assetCount > 0 && (
                   <span
-                    className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-1 rounded-full bg-brand text-white text-[10.5px] font-semibold grid place-items-center tabular-nums"
+                    className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-1 rounded-full bg-brand text-white text-micro font-semibold grid place-items-center tabular-nums"
                     aria-hidden
                   >
                     {assetCount}

@@ -27,7 +27,7 @@ function DarkTip({
   rows: { label: string; value: string; color?: string }[];
 }) {
   return (
-    <div className="rounded-xl bg-charcoal text-white px-3.5 py-2.5 shadow-lg text-[12.5px] min-w-[150px]">
+    <div className="rounded-xl bg-charcoal text-white px-3.5 py-2.5 shadow-lg text-support min-w-[150px]">
       <p className="font-semibold mb-1.5 tabular-nums">{title}</p>
       <ul className="flex flex-col gap-1">
         {rows.map((r) => (
@@ -38,7 +38,7 @@ function DarkTip({
               style={{ background: r.color ?? "rgba(255,255,255,.55)" }}
             />
             <span className="text-white/65">{r.label}</span>
-            <b className="ml-auto tabular-nums">{r.value}</b>
+            <b className="ml-auto font-semibold">{r.value}</b>
           </li>
         ))}
       </ul>
@@ -48,12 +48,12 @@ function DarkTip({
 
 /* ------------------------------------------------------- value at risk */
 
-/** White rounded bars on the brand card. Value at risk by peril. */
+/** White rounded bars on the brand card. Annual loss by peril. */
 export function FeatureBars({ data }: { data: PerilSlice[] }) {
   const rows = data.slice(0, 7);
   if (!rows.length) {
     return (
-      <p className="text-white/70 text-[13px] py-8">
+      <p className="text-white/70 text-ui py-8">
         No modelled loss for this scenario.
       </p>
     );
@@ -67,10 +67,10 @@ export function FeatureBars({ data }: { data: PerilSlice[] }) {
         return (
           <div
             key={r.peril}
-            className="flex-1 flex flex-col items-center gap-2 min-w-0 group"
+            className="flex-1 h-full flex flex-col items-center gap-2 min-w-0 group"
             title={`${perilLabel(r.peril)}: ${money(r.eal)} a year`}
           >
-            <div className="w-full flex-1 flex items-end">
+            <div className="w-full max-w-[64px] flex-1 flex items-end">
               <div
                 className={
                   "w-full rounded-[7px] transition-[height] duration-500 " +
@@ -79,7 +79,7 @@ export function FeatureBars({ data }: { data: PerilSlice[] }) {
                 style={{ height: `${h}%` }}
               />
             </div>
-            <span className="text-[10.5px] text-white/70 truncate w-full text-center">
+            <span className="text-micro text-white/70 truncate w-full text-center">
               {perilLabel(r.peril).split(" ")[0]}
             </span>
           </div>
@@ -95,7 +95,7 @@ export function PerilDonut({ data }: { data: PerilSlice[] }) {
   const rows = data.filter((d) => d.eal > 0).slice(0, 6);
   if (!rows.length) {
     return (
-      <div className="h-[190px] grid place-items-center text-muted text-[13px]">
+      <div className="h-[190px] grid place-items-center text-muted text-ui">
         No loss to attribute.
       </div>
     );
@@ -140,10 +140,10 @@ export function PerilDonut({ data }: { data: PerilSlice[] }) {
 
       <div className="absolute inset-0 grid place-items-center pointer-events-none">
         <div className="text-center">
-          <p className="font-display text-[22px] leading-none tabular-nums">
+          <p className="font-display font-medium text-panel-title leading-none">
             {money(rows.reduce((s, r) => s + r.eal, 0))}
           </p>
-          <p className="text-[11px] text-muted mt-1">a year</p>
+          <p className="text-micro text-muted mt-1">a year</p>
         </div>
       </div>
     </div>
@@ -201,7 +201,7 @@ export function YearBand({
             dataKey="year"
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 11.5, fill: "#737b87" }}
+            tick={{ fontSize: 11, fill: "var(--color-muted)" }}
             interval="preserveStartEnd"
             minTickGap={4}
           />
@@ -275,7 +275,7 @@ export function Spark({
             dataKey="year"
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 10.5, fill: "rgba(255,255,255,.5)" }}
+            tick={{ fontSize: 11, fill: "rgba(255,255,255,.75)" }}
             interval="preserveStartEnd"
             minTickGap={30}
           />
@@ -338,6 +338,71 @@ export function StackBar({
           }}
         />
       ))}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------- spread rail */
+
+/**
+ * The range every other vendor collapses into one number: a hatched track from
+ * the lowest to the highest defensible answer, with the median of all runs and
+ * the number this dashboard is showing marked on it. Two marks, because where
+ * the headline sits inside the spread is itself a finding.
+ */
+export function SpreadRail({
+  low,
+  median,
+  high,
+  mark,
+  markLabel = "This run",
+  currency = "USD",
+}: {
+  low: number;
+  median: number;
+  high: number;
+  mark?: number;
+  markLabel?: string;
+  currency?: string;
+}) {
+  const span = high - low;
+  const at = (v: number) =>
+    span > 0 ? Math.min(100, Math.max(0, ((v - low) / span) * 100)) : 50;
+
+  return (
+    <div className="w-full">
+      <div className="relative h-[14px] rounded-full bg-line overflow-hidden">
+        <span aria-hidden className="absolute inset-0 ac-hatch bg-white/70" />
+      </div>
+      <div className="relative h-0">
+        <span
+          aria-hidden
+          title={`Median of every run ${money(median, currency)}`}
+          className="absolute -top-[19px] w-[3px] h-[24px] rounded-full bg-brand"
+          style={{ left: `calc(${at(median)}% - 1.5px)` }}
+        />
+        {mark !== undefined && (
+          <span
+            aria-hidden
+            title={`${markLabel} ${money(mark, currency)}`}
+            className="absolute -top-[22px] w-[3px] h-[30px] rounded-full bg-charcoal"
+            style={{ left: `calc(${at(mark)}% - 1.5px)` }}
+          />
+        )}
+      </div>
+      <div className="flex justify-between mt-3 text-support tabular-nums text-muted">
+        <span>{money(low, currency)} lowest defensible</span>
+        <span>{money(high, currency)} highest defensible</span>
+      </div>
+      <span className="sr-only">
+        Across every defensible model combination the answer runs from{" "}
+        {money(low, currency)} to {money(high, currency)} a year, with a median of{" "}
+        {money(median, currency)}
+        {mark !== undefined
+          ? `, and ${markLabel.toLowerCase()} at ${money(mark, currency)}`
+          : ""}
+        .
+      </span>
     </div>
   );
 }

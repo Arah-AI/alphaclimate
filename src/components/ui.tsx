@@ -4,6 +4,12 @@ import * as React from "react";
 import { clsx } from "clsx";
 import { ChevronDown } from "lucide-react";
 
+/** The single definition of the small uppercase label. Previously this role
+ *  had four incompatible spellings across seven call sites, drifting in both
+ *  size and tracking. */
+export const EYEBROW =
+  "text-micro uppercase tracking-[0.1em] text-muted font-semibold";
+
 /* ------------------------------------------------------------------ card */
 
 export function Card({
@@ -19,7 +25,7 @@ export function Card({
         tone === "light" && "bg-card border border-line",
         tone === "dark" && "bg-charcoal text-white",
         tone === "brand" &&
-          "text-white bg-[linear-gradient(155deg,#1f7ae8_0%,#0b6be1_45%,#07439a_100%)] relative overflow-hidden",
+          "text-white bg-[linear-gradient(155deg,#0a4fae_0%,#0f56b4_50%,#125cc0_100%)] relative overflow-hidden",
         className,
       )}
       {...rest}
@@ -51,7 +57,7 @@ export function CardHead({
     >
       <h2
         className={clsx(
-          "font-display text-[19px] leading-tight font-medium flex items-center gap-2 min-w-0",
+          "font-display text-card-title leading-tight font-medium flex items-center gap-2 min-w-0",
           tone === "dark" ? "text-white" : "text-ink",
         )}
       >
@@ -69,7 +75,6 @@ export function Grip({ tone = "light" }: { tone?: "light" | "dark" }) {
     <span
       aria-hidden
       className="grid grid-cols-2 gap-[3px] shrink-0 p-1"
-      title="Drag to rearrange"
     >
       {Array.from({ length: 6 }).map((_, i) => (
         <i
@@ -97,7 +102,7 @@ export function StatBig({
     <span
       className={clsx(
         "font-display font-medium tabular-nums tracking-[-0.02em]",
-        "text-[38px] sm:text-[44px] leading-[1.05]",
+        "text-display sm:text-display-lg leading-[1.05]",
         className,
       )}
     >
@@ -136,7 +141,7 @@ export function Chip({
       title={title}
       className={clsx(
         "inline-flex items-center gap-1 rounded-full px-2 py-[3px]",
-        "text-[12px] font-medium leading-none whitespace-nowrap tabular-nums",
+        "text-support font-medium leading-none whitespace-nowrap tabular-nums",
         CHIP_TONE[tone],
       )}
     >
@@ -165,7 +170,7 @@ export function Select({
     <div
       className={clsx(
         "inline-flex items-center gap-1 rounded-full pl-3 pr-2 py-[6px] shrink-0",
-        "text-[13px] font-medium",
+        "text-ui font-medium",
         tone === "light"
           ? "bg-card border border-line-2 text-ink"
           : "bg-white/12 text-white",
@@ -248,7 +253,7 @@ export function LegendDots({
         <li
           key={it.label}
           className={clsx(
-            "flex items-center gap-[6px] text-[12.5px]",
+            "flex items-center gap-[6px] text-support",
             tone === "dark" ? "text-white/70" : "text-muted",
           )}
         >
@@ -299,14 +304,14 @@ export function ErrorNote({
       role="alert"
       className="rounded-[20px] border border-danger/25 bg-danger-tint p-6"
     >
-      <p className="font-display text-[19px] text-ink mb-1">
+      <p className="font-display font-medium text-card-title text-ink mb-1">
         The risk engine did not answer
       </p>
-      <p className="text-[14px] text-ink-2 mb-3">{message}</p>
+      <p className="text-ui text-ink-2 mb-3">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="rounded-full bg-ink text-white text-[13px] font-medium px-4 py-2 hover:bg-charcoal-2 transition-colors"
+          className="rounded-full bg-ink text-white text-ui font-medium px-4 py-2 hover:bg-charcoal-2 transition-colors"
         >
           Try again
         </button>
@@ -320,7 +325,7 @@ export function ExtrapolationFlag({ title }: { title?: string }) {
   return (
     <span
       title={title ?? "Hazard intensity sits outside the damage curve's calibrated range"}
-      className="inline-flex items-center gap-1 rounded-full bg-warn-tint text-warn px-2 py-[2px] text-[11px] font-medium whitespace-nowrap"
+      className="inline-flex items-center gap-1 rounded-full bg-warn-tint text-warn px-2 py-[2px] text-micro font-medium whitespace-nowrap"
     >
       ▲ extrapolated
     </span>

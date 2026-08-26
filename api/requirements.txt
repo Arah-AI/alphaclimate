@@ -9,3 +9,24 @@ Pillow==12.3.0
 
 # Grounded analyst: Kimi speaks the OpenAI-compatible protocol.
 openai==2.16.0
+
+# Multipart form parsing for portfolio uploads (api/app/ingest.py).
+python-multipart==0.0.22
+
+# Disclosure evidence pack PDFs (api/app/report.py). reportlab, not weasyprint:
+# weasyprint renders via Pango/cairo/GDK-pixbuf, roughly 150 MB of system
+# shared libraries in the image and a resident set a 1 GB VPS notices.
+# reportlab is a 1.9 MB wheel, 4.8 MB installed, and its only dependency
+# (Pillow) is already pinned above for the tile renderer.
+reportlab==5.0.1
+
+# Indirect (supply-chain) loss: multi-regional input-output tables. The demo
+# runs on pymrio's small built-in TEST system; EXIOBASE is multi-GB and is not
+# downloaded. Pulls pandas + pyarrow + matplotlib (~221 MB installed), of which
+# pyarrow (122 MB), matplotlib and faker are unused by this code path.
+pymrio==0.6.3
+
+# Custom emissions pathways: FaIR simple climate model. First run fetches ~74 MB
+# of RCMIP v5.1.0 CSVs (pooch-cached) and peaks near 400 MB RSS. Pulls scipy +
+# xarray (~79 MB installed).
+fair==2.2.4

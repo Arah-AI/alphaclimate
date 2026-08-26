@@ -1,0 +1,23 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    environment:
+      ALPHACLIMATE_CURVES: /srv/data/damage_curves.json
+      ALPHACLIMATE_HAZARD_CACHE: /srv/data/hazard_cache.json
+    expose:
+      - "8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
+    ports:
+      - "3000"

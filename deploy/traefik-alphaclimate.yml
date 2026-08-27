@@ -1,25 +1,47 @@
 # Drop into /etc/dokploy/traefik/dynamic/ on the tradevantage host.
-# Mirrors the shape Dokploy generates for its own apps.
+#
+# /api is routed straight to the FastAPI service rather than through a Next
+# rewrite. Next serialises rewrites into the standalone build manifest at BUILD
+# time, so a runtime API_URL is ignored; routing here keeps the image portable
+# and means the API address is a deploy concern, not a build-time constant.
 http:
   routers:
-    alphaclimate-router-web:
-      rule: Host(`alphaclimate.tradevantage.gg`)
-      service: alphaclimate-service
-      middlewares:
-        - redirect-to-https
-      entryPoints:
-        - web
-    alphaclimate-router-websecure:
-      rule: Host(`alphaclimate.tradevantage.gg`)
-      service: alphaclimate-service
-      middlewares: []
-      entryPoints:
-        - websecure
+    alphaclimate-api-websecure:
+      rule: Host(`alphaclimate.tradevantage.gg`) && PathPrefix(`/api`)
+      service: alphaclimate-api
+      priority: 100
+      entryPoints: [websecure]
       tls:
         certResolver: letsencrypt
+    alphaclimate-api-web:
+      rule: Host(`alphaclimate.tradevantage.gg`) && PathPrefix(`/api`)
+      service: alphaclimate-api
+      priority: 100
+      middlewares: [redirect-to-https]
+      entryPoints: [web]
+
+    alphaclimate-web-websecure:
+      rule: Host(`alphaclimate.tradevantage.gg`)
+      service: alphaclimate-web
+      priority: 1
+      entryPoints: [websecure]
+      tls:
+        certResolver: letsencrypt
+    alphaclimate-web-web:
+      rule: Host(`alphaclimate.tradevantage.gg`)
+      service: alphaclimate-web
+      priority: 1
+      middlewares: [redirect-to-https]
+      entryPoints: [web]
+
   services:
-    alphaclimate-service:
+    alphaclimate-web:
       loadBalancer:
         servers:
           - url: http://alphaclimate_web:3000
+        passHostHeader: true
+    alphaclimate-api:
+      loadBalancer:
+        servers:
+          - url: http://alphaclimate_api:8000
         passHostHeader: true

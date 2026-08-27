@@ -22,7 +22,7 @@ services:
     image: ghcr.io/rafieamandio/alphaclimate-web:latest
     networks: [dokploy-network]
     environment:
-      API_URL: http://api:8000
+      API_URL: http://alphaclimate_api:8000
     deploy:
       replicas: 1
       restart_policy: { condition: any }

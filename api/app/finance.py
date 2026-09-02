@@ -9,6 +9,7 @@ constant.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, asdict, field
 
 
@@ -34,6 +35,10 @@ class Assumptions:
     premium_rate_on_eal: float = 1.35    # premium as a multiple of expected loss
     premium_escalation: float = 0.06     # annual real premium growth
     insurable: bool = True
+    severity_tail_index: float = 1.5
+    # Pareto shape of the per-event loss severity, used to spread the expected
+    # annual loss across events before the per-event terms bite. Must exceed 1
+    # or the mean does not exist. See `_expected_recovery`.
 
     # hazard trend: how much worse the annual loss gets per year within horizon
     hazard_growth: float = 0.025
@@ -92,14 +97,46 @@ class FinancialImpact:
         return asdict(self)
 
 
-def _insurance_recovery(gross_loss: float, asset_value: float, a: Assumptions) -> float:
-    """Recovery on a single loss amount after deductible, limit and coinsurance."""
-    if not a.insurable or gross_loss <= 0:
+def _expected_recovery(eal: float, asset_value: float, a: Assumptions) -> float:
+    """Expected annual recovery from a per-event deductible, limit and coinsurance.
+
+    The terms in `Assumptions` are per event, so they cannot be subtracted from
+    an expected annual loss. `max(0, eal - deductible)` asks whether the average
+    year clears the deductible, and for any site whose EAL is under 2% of value
+    the answer is no, however many modelled events are total losses. That is a
+    programme that charges premium and never pays, which is not a programme.
+
+    Catastrophe models do not make this mistake: the financial module applies
+    deductibles, limits and coinsurance to the ground-up loss of each event, and
+    the average annual loss is taken afterwards, from the net event losses.
+
+    `translate`'s public signature carries only the mean of that distribution,
+    so the severity has to be reconstructed from one moment plus a shape. The
+    shape is the thing that matters: a deductible sits far out in the tail, and
+    hcmc-tower's EAL is 0.02% of value against a worst modelled event of 20m, so
+    a thin-tailed assumption prices that event at nothing and the programme
+    silently never pays. The single-parameter Pareto is the standard severity
+    model for excess-of-loss property pricing for exactly this reason, and its
+    shape is exposed as `severity_tail_index` rather than buried here.
+
+    Expected loss in the layer [d, d + limit] is the integral of the survival
+    function across it, which for this distribution is elementary.
+    """
+    if not a.insurable or eal <= 0:
         return 0.0
-    deductible = a.deductible_fraction * asset_value
+    d = a.deductible_fraction * asset_value
     limit = a.limit_fraction * asset_value
-    covered = max(0.0, min(gross_loss - deductible, limit))
-    return covered * (1.0 - a.coinsurance)
+    alpha = max(1.0 + 1e-6, a.severity_tail_index)
+    x_m = eal * (alpha - 1.0) / alpha     # scale that puts the mean back on the EAL
+    lo, hi = d, d + limit
+    below = max(0.0, min(hi, x_m) - lo)   # the survival function is 1 below x_m
+    lo_t, hi_t = max(lo, x_m), hi
+    above = (
+        (x_m ** alpha / (alpha - 1.0))
+        * (lo_t ** (1.0 - alpha) - hi_t ** (1.0 - alpha))
+        if hi_t > lo_t else 0.0
+    )
+    return (below + above) * (1.0 - a.coinsurance)
 
 
 def translate(
@@ -127,7 +164,7 @@ def translate(
     )
 
     # --- insurance --------------------------------------------------------
-    recovery = _insurance_recovery(eal, value, a)
+    recovery = _expected_recovery(eal, value, a)
     premium = a.premium_rate_on_eal * eal if a.insurable else 0.0
 
     annual_net = eal + annual_bi - recovery + premium
@@ -140,7 +177,7 @@ def translate(
         prem_growth = (1.0 + a.premium_escalation) ** t
         damage_t = eal * growth
         bi_t = annual_bi * growth
-        rec_t = _insurance_recovery(damage_t, value, a)
+        rec_t = _expected_recovery(damage_t, value, a)
         prem_t = premium * prem_growth
         net_t = damage_t + bi_t - rec_t + prem_t
         disc = (1.0 + a.discount_rate) ** t
@@ -296,12 +333,36 @@ def demo() -> None:
     assert bare.annual_net_cost > (imp.annual_net_cost - imp.annual_premium), \
         "losing cover must hurt once premium is excluded from the comparison"
 
-    # Deductible above the loss means no recovery at all.
-    high_ded = translate(100_000.0, 0.05, fin, Assumptions(deductible_fraction=0.5))
-    assert high_ded.annual_insurance_recovery == 0.0
+    # A 900k EAL sits under the 1m per-event deductible, and the programme must
+    # still pay: the deductible applies to each event, not to the average year.
+    assert imp.annual_insurance_recovery > 0, \
+        "an EAL below the deductible is not a programme that never pays"
+    assert imp.annual_insurance_recovery < 900_000.0, \
+        "recovery cannot exceed the loss it is recovering"
+
+    # Recovery falls monotonically as the deductible rises, and a deductible
+    # 28x the expected loss is cover in name only.
+    none_ded = translate(900_000.0, 0.22, fin, Assumptions(deductible_fraction=0.0))
+    high_ded = translate(900_000.0, 0.22, fin, Assumptions(deductible_fraction=0.5))
+    assert (none_ded.annual_insurance_recovery > imp.annual_insurance_recovery
+            > high_ded.annual_insurance_recovery), "recovery must fall as the deductible rises"
+    assert high_ded.annual_insurance_recovery < 0.05 * high_ded.annual_premium, \
+        "1.2m of premium against this recovery is cover in name only"
+
+    # The case the whole model exists for: hcmc-tower's geometry, an EAL 80x
+    # below the per-event deductible against a 20m worst modelled event. The
+    # deductible is per event, and events are not the average year.
+    rare = AssetFinancials(value=215_000_000.0, annual_revenue=30_000_000.0)
+    thin = translate(52_000.0, 0.0002, rare, a)
+    assert thin.annual_insurance_recovery > 0, \
+        "a per-event deductible 80x the EAL is still reached by events"
+    # Out there it is the tail shape, not the mean, that sets the recovery.
+    fat = translate(52_000.0, 0.0002, rare, Assumptions(severity_tail_index=1.1))
+    assert fat.annual_insurance_recovery > thin.annual_insurance_recovery, \
+        "a fatter tail must put more of the same expected loss above the deductible"
 
     # Limit caps recovery.
-    capped = _insurance_recovery(40_000_000.0, 50_000_000.0, Assumptions())
+    capped = _expected_recovery(40_000_000.0, 50_000_000.0, Assumptions())
     assert capped <= 0.80 * 50_000_000.0
 
     # Impairment is capped at asset value even under an absurd loss.

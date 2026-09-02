@@ -75,10 +75,9 @@ class PerilResult:
         Derived from the same integration as the EAL so the two cannot drift:
         it is the EAL expressed as a share of asset value, per unit value.
         """
-        if not self.lc.losses:
+        if not self.lc.losses or not self._asset_value:
             return 0.0
-        peak = max(self.lc.damage_fractions)
-        return min(1.0, peak)
+        return self.lc.eal / self._asset_value
 
 
 def _measured(r: PerilResult) -> list[int]:
@@ -257,7 +256,11 @@ def summary(scenario: str = "ssp585", overrides: dict | None = None) -> dict:
         eal = sum(r.lc.eal for r in event_results)
         writedown = sum(r.writedown for r in perm_results)
         tail += sum(r.lc.eal_tail for r in event_results)
-        mdf = max((r.mean_damage_fraction for r in event_results), default=0.0)
+        # Expected shares of value add, the way the EALs they come from add.
+        # A max was right while this was a peak; it is not right for an
+        # expectation, and it would hand `translate` an outage driver that does
+        # not correspond to the EAL passed beside it.
+        mdf = sum(r.mean_damage_fraction for r in event_results)
 
         fin = translate(
             eal,
@@ -496,7 +499,7 @@ def asset_detail(asset_id: str, scenario: str = "ssp585",
     results = _asset_perils(asset, scenario)
 
     eal = sum(r.lc.eal for r in results)
-    mdf = max((r.mean_damage_fraction for r in results), default=0.0)
+    mdf = sum(r.mean_damage_fraction for r in results)
     fin_in = AssetFinancials(
         value=asset.value,
         annual_revenue=asset.annual_revenue,

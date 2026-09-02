@@ -137,14 +137,17 @@ herrings.
 
 ## Reporting
 
-End your final message with exactly two blocks.
+End your final message with exactly these two blocks, both headed, in this order.
+Anything before them is ignored.
 
-First, a one-line summary. It becomes the commit subject, so make it say what you
-changed and what you expected. Not "fixed bugs". Something like:
-
+    ## Summary
     Route asset_detail through the same permanent-inundation exclusion as summary
 
-Then a findings block, which is appended to `research/FINDINGS.md` and read by
+One line, under 72 characters, imperative mood. It becomes the commit subject, so
+it must say what you changed. Not "Done", not a score, not a list of everything
+you touched. If you changed nothing, say what you ruled out instead.
+
+Then the findings block, which is appended to `research/FINDINGS.md` and read by
 every later experiment:
 
     ## Findings

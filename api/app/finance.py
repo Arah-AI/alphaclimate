@@ -89,7 +89,8 @@ class FinancialImpact:
     ltv_after: float
     dscr_before: float
     dscr_after: float
-    covenant_breach: bool
+    covenant_breach: bool          # a covenant this climate cost pushed through
+    covenant_breach_before: bool   # already through a covenant at zero climate cost
     uninsurable_flag: bool
     yearly: list[dict] = field(default_factory=list)
 
@@ -205,7 +206,24 @@ def translate(
     dscr_after = ((noi - annual_net) / ds) if ds > 0 else 0.0
 
     # Common covenant floors: DSCR 1.25x, LTV 75%.
-    breach = bool((ds > 0 and dscr_after < 1.25) or (fin.debt > 0 and ltv_after > 0.75))
+    #
+    # A climate report says "climate breaks this covenant", so the reportable
+    # breach is the one climate causes. An asset already through a floor at
+    # zero climate cost is in breach for reasons this model never computed -
+    # leverage, rates, an occupancy problem - and counting it here credits the
+    # hazard with someone else's default. Tested per covenant, not in
+    # aggregate: an asset already failing DSCR can still be pushed through LTV
+    # by climate, and that is a new default trigger the lender acts on.
+    def _breached(dscr: float, ltv: float) -> set[str]:
+        out = set()
+        if ds > 0 and dscr < 1.25:
+            out.add("dscr")
+        if fin.debt > 0 and ltv > 0.75:
+            out.add("ltv")
+        return out
+
+    before = _breached(dscr_before, ltv_before)
+    breach = bool(_breached(dscr_after, ltv_after) - before)
 
     # An asset whose expected loss approaches the premium the market will bear
     # is where cover withdraws. 8% of value a year is a blunt but defensible line.
@@ -226,6 +244,7 @@ def translate(
         dscr_before=round(dscr_before, 4),
         dscr_after=round(dscr_after, 4),
         covenant_breach=breach,
+        covenant_breach_before=bool(before),
         uninsurable_flag=uninsurable,
         yearly=yearly,
     )
@@ -360,6 +379,24 @@ def demo() -> None:
     fat = translate(52_000.0, 0.0002, rare, Assumptions(severity_tail_index=1.1))
     assert fat.annual_insurance_recovery > thin.annual_insurance_recovery, \
         "a fatter tail must put more of the same expected loss above the deductible"
+
+    # A covenant is reported against climate only where climate moved it.
+    # hcmc-tower's geometry: DSCR 0.73 on its own numbers, so the site is in
+    # default before a drop of water falls, and no hazard caused that.
+    levered = AssetFinancials(value=215_000_000.0, annual_revenue=30_000_000.0,
+                              debt=150_000_000.0, annual_debt_service=14_400_000.0)
+    pre = translate(52_000.0, 0.0002, levered, a)
+    assert pre.dscr_before < 1.25 and pre.covenant_breach_before
+    assert not pre.covenant_breach, \
+        "a site already in default at zero hazard is not a climate breach"
+    # But a second covenant, broken by climate, is still a new default trigger.
+    crushed = translate(1_000_000.0, 0.05, levered, a)
+    assert crushed.ltv_before < 0.75 < crushed.ltv_after
+    assert crushed.covenant_breach and crushed.covenant_breach_before
+
+    # And an asset that starts inside every floor is still reported when
+    # climate pushes it through one, otherwise the field would just be off.
+    assert imp.covenant_breach and not imp.covenant_breach_before
 
     # Limit caps recovery.
     capped = _expected_recovery(40_000_000.0, 50_000_000.0, Assumptions())

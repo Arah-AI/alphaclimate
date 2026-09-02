@@ -356,6 +356,7 @@ def summary(scenario: str = "ssp585", overrides: dict | None = None) -> dict:
     total_recovery = 0.0
     bands = {"low": 0, "moderate": 0, "high": 0, "severe": 0}
     breaches = 0
+    breaches_pre_existing = 0
     uninsurable = 0
     tail = 0.0
     total_writedown = 0.0
@@ -399,6 +400,8 @@ def summary(scenario: str = "ssp585", overrides: dict | None = None) -> dict:
         bands[band] += 1
         if fin.covenant_breach:
             breaches += 1
+        if fin.covenant_breach_before:
+            breaches_pre_existing += 1
         if fin.uninsurable_flag:
             uninsurable += 1
 
@@ -424,6 +427,7 @@ def summary(scenario: str = "ssp585", overrides: dict | None = None) -> dict:
             "impairment_pct": fin.value_impairment_pct,
             "band": band,
             "covenant_breach": fin.covenant_breach,
+            "covenant_breach_before": fin.covenant_breach_before,
             "uninsurable": fin.uninsurable_flag,
             "extrapolated": any(r.lc.extrapolated for r in results),
             "top_peril": top,
@@ -491,7 +495,11 @@ def summary(scenario: str = "ssp585", overrides: dict | None = None) -> dict:
             "total_value": total_value,
             "asset_count": len(assets),
             "bands": bands,
+            # Breaches climate causes. Sites already through a floor on their
+            # own numbers are counted separately rather than dropped: they are
+            # a real credit finding, they are just not this model's finding.
             "covenant_breaches": breaches,
+            "covenant_breaches_pre_existing": breaches_pre_existing,
             "uninsurable_count": uninsurable,
             "tail_share": round(tail / total_eal, 4) if total_eal else 0.0,
             "permanent_writedown": round(total_writedown, 2),
@@ -730,6 +738,16 @@ def demo() -> None:
         f"answered with its own dataset, which the store cannot do. WATCH has "
         f"no future files and ssp126 is served rcp4p5.")
     assert sp["by_driver"]["climate_model"]["levels"] <= ranks
+
+    # Every breach the headline reports must be one climate caused: a site
+    # already through its floor at zero hazard belongs in the other count.
+    assert h["covenant_breaches"] == sum(
+        1 for r in s["assets"] if r["covenant_breach"])
+    for r in s["assets"]:
+        if not r["covenant_breach"]:
+            continue
+        assert not r["covenant_breach_before"], \
+            f"{r['id']} breaches at zero climate loss and is reported as climate"
 
     # The run id names the portfolio it was computed over.
     assume = Assumptions.merged(None)

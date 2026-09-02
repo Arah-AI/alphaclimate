@@ -11,6 +11,7 @@ one of the documented ways asset-level loss gets understated.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, asdict
 from typing import Sequence
 
@@ -54,6 +55,73 @@ def is_extrapolated(x: float, calibration_range: Sequence[float]) -> bool:
 # --------------------------------------------------------------------------
 # loss integration
 # --------------------------------------------------------------------------
+
+# Sub-intervals inserted between every pair of modelled return periods before
+# the integral is taken.
+#
+# The hazard layers ship a nine-point grid whose neighbouring return periods
+# differ by around 2.5x. Loss is not linear in exceedance probability across a
+# gap that wide: depth moves with log(RP) and damage is a non-linear function of
+# depth, so a trapezoid straight from one modelled point to the next is a chord
+# across the loss curve, not the area under it. Refining until the answer stops
+# moving is the whole of the fix. At 16 the portfolio EAL agrees with a 32x
+# finer grid to well under a per cent; at 1 (the old behaviour) single perils
+# were 30% out.
+INTEGRATION_SUBDIVISIONS = 16
+
+
+def _interp_log_rp(rp: float, rps: Sequence[float], vals: Sequence[float]) -> float:
+    """A value carried on a return-period grid, read off at any return period.
+
+    Interpolated in log-RP space, because that is the space hazard intensity is
+    close to linear in. Held flat outside the modelled range rather than
+    extrapolated, for the same reason `interp_damage` holds its curve flat.
+    """
+    if not rps:
+        return 0.0
+    if rp <= rps[0]:
+        return float(vals[0])
+    if rp >= rps[-1]:
+        return float(vals[-1])
+    for i in range(1, len(rps)):
+        if rp <= rps[i]:
+            a, b = math.log(rps[i - 1]), math.log(rps[i])
+            w = (math.log(rp) - a) / (b - a)
+            return float(vals[i - 1] + (vals[i] - vals[i - 1]) * w)
+    return float(vals[-1])
+
+
+def _integration_grid(
+    rps: Sequence[float],
+    ints: Sequence[float],
+    protection_rp: float | None,
+    n: int,
+) -> tuple[list[float], list[float]]:
+    """Refine the modelled return periods into the grid the integral is taken on.
+
+    Sub-division is geometric, so the grid is uniform in log(RP), the variable
+    the intensity is interpolated in. Every modelled return period is kept
+    exactly, so the refined curve still contains each point the hazard layer
+    actually measured.
+
+    A flood standard of protection enters here, as a genuine discontinuity: a
+    knot immediately below the standard (which the zeroing below will set to no
+    loss) and a knot at the standard itself (which keeps its full loss). Without
+    them the defence degrades into a ramp spanning whichever grid interval
+    happens to straddle it, and half a step of held-back loss survives the
+    defence that was supposed to hold it back.
+    """
+    grid: list[float] = []
+    for i in range(len(rps) - 1):
+        grid.append(rps[i])
+        la, lb = math.log(rps[i]), math.log(rps[i + 1])
+        grid.extend(math.exp(la + (lb - la) * k / n) for k in range(1, n))
+    grid.append(rps[-1])
+    if protection_rp and rps[0] < protection_rp < rps[-1]:
+        grid += [protection_rp * (1.0 - 1e-9), float(protection_rp)]
+    grid = sorted(set(grid))
+    return grid, [_interp_log_rp(r, rps, ints) for r in grid]
+
 
 @dataclass
 class LossCurve:
@@ -101,12 +169,15 @@ def loss_curve(
     rps = [float(p[0]) for p in pairs]
     ints = [0.0 if p[1] is None else float(p[1]) for p in pairs]
 
+    # The curve is integrated, and reported, on a refined grid. Reporting the
+    # coarse input while integrating something else is how a number and the
+    # curve drawn next to it stop being the same object.
+    rps, ints = _integration_grid(rps, ints, protection_rp, INTEGRATION_SUBDIVISIONS)
+
     fracs = [interp_damage(i, curve_x, curve_y) for i in ints]
-    # A defence built to a 1-in-N standard passes nothing through below N.
-    # ponytail: modelled as a step at the standard, so the trapezoid spanning
-    # the standard carries half a step of loss it strictly should not. That
-    # errs high, which is the right direction, and real defences do not fail
-    # as a clean step anyway.
+    # A defence built to a 1-in-N standard passes nothing through below N. The
+    # grid carries a knot immediately below the standard, so this is the clean
+    # step the standard describes rather than a ramp across a grid interval.
     if protection_rp:
         fracs = [0.0 if rp < protection_rp else f for rp, f in zip(rps, fracs)]
     losses = [f * asset_value for f in fracs]
@@ -114,14 +185,16 @@ def loss_curve(
     # exceedance probability of each return period
     probs = [1.0 / rp for rp in rps]
 
-    # Integrate loss over exceedance probability. probs descend as rps ascend.
-    # Anchor at p = min(1.0, 1/rp_min) with zero loss: events more frequent than
-    # the shortest modelled return period are assumed to cause no damage, which
-    # is the standard assumption and is conservative in the right direction.
+    # Integrate loss over the whole probability domain, p in [0, 1]. probs
+    # descend as rps ascend. The band between an annual event (p = 1) and the
+    # most frequent modelled one is anchored at zero loss: events more frequent
+    # than the shortest modelled return period are assumed to cause no damage.
+    # That band is half the probability domain when the layer starts at 1-in-2,
+    # so dropping it rather than integrating a ramp across it is not a rounding
+    # difference, it is a third of the answer.
     eal_body = 0.0
-    anchor_p = min(1.0, 1.0 / rps[0]) if rps[0] > 0 else 1.0
-    if anchor_p > probs[0]:
-        eal_body += 0.5 * (0.0 + losses[0]) * (anchor_p - probs[0])
+    if probs[0] < 1.0:
+        eal_body += 0.5 * (0.0 + losses[0]) * (1.0 - probs[0])
     for i in range(len(probs) - 1):
         eal_body += 0.5 * (losses[i] + losses[i + 1]) * (probs[i] - probs[i + 1])
 
@@ -145,20 +218,7 @@ def loss_curve(
 
 def loss_at_return_period(lc: LossCurve, rp: float) -> float:
     """Loss at an arbitrary return period, interpolated in log-RP space."""
-    if not lc.return_periods:
-        return 0.0
-    if rp <= lc.return_periods[0]:
-        return lc.losses[0]
-    if rp >= lc.return_periods[-1]:
-        return lc.losses[-1]
-    import math
-    for i in range(1, len(lc.return_periods)):
-        if rp <= lc.return_periods[i]:
-            a, b = lc.return_periods[i - 1], lc.return_periods[i]
-            la, lb = lc.losses[i - 1], lc.losses[i]
-            w = (math.log(rp) - math.log(a)) / (math.log(b) - math.log(a))
-            return la + (lb - la) * w
-    return lc.losses[-1]
+    return _interp_log_rp(rp, lc.return_periods, lc.losses)
 
 
 # --------------------------------------------------------------------------
@@ -318,7 +378,10 @@ def demo() -> None:
     lc = loss_curve(rps, ints, cx, cy, asset_value=10_000_000.0,
                     calibration_range=[0.0, 6.0])
 
-    assert len(lc.losses) == len(rps)
+    # The curve is reported on the grid it was integrated on, which refines the
+    # input but must still contain every point the input gave.
+    assert set(rps) <= set(lc.return_periods), "modelled return periods must survive"
+    assert len(lc.losses) == len(lc.return_periods) == len(lc.intensities)
     assert lc.losses == sorted(lc.losses), "loss must increase with return period"
     assert lc.eal > 0, "a flooding asset must have a positive EAL"
     assert abs(lc.eal - (lc.eal_body + lc.eal_tail)) < 1e-6
@@ -339,9 +402,28 @@ def demo() -> None:
 
     # RP interpolation is monotone and bracketed.
     l100 = loss_at_return_period(lc, 100)
-    assert abs(l100 - lc.losses[3]) < 1e-6, "exact RP hit returns the exact loss"
+    assert abs(l100 - interp_damage(1.5, cx, cy) * 10_000_000.0) < 1e-6, \
+        "exact RP hit returns the exact loss"
+    l50 = loss_at_return_period(lc, 50)
     l75 = loss_at_return_period(lc, 75)
-    assert lc.losses[2] <= l75 <= lc.losses[3], "interpolated loss sits between knots"
+    assert l50 <= l75 <= l100, "interpolated loss sits between knots"
+
+    # The whole point of the refined grid: the answer must not depend on it.
+    fine_r = [math.exp(math.log(10) + (math.log(500) - math.log(10)) * k / 200.0)
+              for k in range(201)]
+    fine_i = [_interp_log_rp(r, rps, ints) for r in fine_r]
+    fine = loss_curve(fine_r, fine_i, cx, cy, 10_000_000.0)
+    assert abs(fine.eal / lc.eal - 1.0) < 0.01, \
+        f"EAL must be converged on its grid: {lc.eal} vs {fine.eal}"
+
+    # Half the probability domain sits between an annual event (p = 1) and a
+    # 1-in-2 one. It is a ramp anchored at zero loss, not a hole in the domain.
+    # A curve that is a flat 0.5 damage from 1-in-2 out to 1-in-1000 must give
+    # 5,000,000 * (1 - 0.5/2): the flat body and tail contribute 5m * 0.5, and
+    # the anchor ramp contributes half of 5m * 0.5 again.
+    flat = loss_curve([2, 1000], [1.0, 1.0], cx, cy, 10_000_000.0)
+    assert abs(flat.eal - 5_000_000.0 * 0.75) < 1e-6, \
+        f"the p in [1/rp_min, 1] band must carry a zero-anchored ramp: {flat.eal}"
 
     # Unsorted input must still work.
     shuffled = loss_curve([100, 10, 50, 25, 500, 250],
@@ -351,9 +433,19 @@ def demo() -> None:
     # Flood defences: a 1-in-100 standard zeroes everything more frequent than
     # a 1-in-100 event, and must cut the EAL hard without touching the tail.
     defended = loss_curve(rps, ints, cx, cy, 10_000_000.0, protection_rp=100)
-    assert defended.losses[:3] == [0.0, 0.0, 0.0], "sub-SOP events must be held back"
-    assert defended.losses[3:] == lc.losses[3:], "events past the SOP are unchanged"
+    assert all(l == 0.0 for rp, l in zip(defended.return_periods, defended.losses)
+               if rp < 100), "sub-SOP events must be held back"
+    assert all(abs(loss_at_return_period(defended, rp)
+                   - loss_at_return_period(lc, rp)) < 1e-6 for rp in (100, 250, 500)), \
+        "events past the SOP are unchanged"
+    # The standard is a discontinuity: no loss immediately below it, full loss
+    # at it. Not a ramp across whichever grid interval happens to straddle it.
+    assert loss_at_return_period(defended, 99.999) == 0.0, "the defence is a step"
     assert defended.eal < 0.5 * lc.eal, "a 1-in-100 defence must cut EAL sharply"
+    # And a defended EAL must be converged too, or the step is a grid artefact.
+    fine_def = loss_curve(fine_r, fine_i, cx, cy, 10_000_000.0, protection_rp=100)
+    assert abs(fine_def.eal / defended.eal - 1.0) < 0.01, \
+        f"defended EAL must be converged: {defended.eal} vs {fine_def.eal}"
     assert defended.eal_tail == lc.eal_tail, "the tail sits past the SOP, untouched"
     assert loss_curve(rps, ints, cx, cy, 1e7, protection_rp=None).eal == lc.eal, \
         "no known standard means undefended, identical to before"

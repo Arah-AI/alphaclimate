@@ -81,6 +81,17 @@ class PerilResult:
         return min(1.0, peak)
 
 
+def _measured(r: PerilResult) -> list[int]:
+    """Indices of the loss curve that are points the hazard layer measured.
+
+    `loss_curve` refines the layer's return periods before integrating and
+    reports the refined grid, keeping every original point exactly. This picks
+    those back out for display.
+    """
+    keep = set(r.reading.return_periods)
+    return [j for j, rp in enumerate(r.lc.return_periods) if rp in keep]
+
+
 def _asset_perils(a: pf.Asset, scenario: str) -> list[PerilResult]:
     """Best-estimate result per peril for one asset."""
     out: list[PerilResult] = []
@@ -545,10 +556,17 @@ def asset_detail(asset_id: str, scenario: str = "ssp585",
                 "peril": r.peril,
                 "label": r.peril.replace("_", " "),
                 "units": r.reading.units,
-                "return_periods": r.lc.return_periods,
-                "intensities": [round(i, 4) for i in r.lc.intensities],
-                "damage_fractions": [round(d, 4) for d in r.lc.damage_fractions],
-                "losses": [round(x, 2) for x in r.lc.losses],
+                # The engine integrates on a refined grid; the layer only ever
+                # measured these points, so the table shows these. Selecting
+                # rather than recomputing keeps the row and the EAL the same
+                # object: every displayed value is a point on the curve that
+                # was integrated.
+                "return_periods": [r.lc.return_periods[j] for j in _measured(r)],
+                "intensities": [round(r.lc.intensities[j], 4) for j in _measured(r)],
+                "damage_fractions": [
+                    round(r.lc.damage_fractions[j], 4) for j in _measured(r)
+                ],
+                "losses": [round(r.lc.losses[j], 2) for j in _measured(r)],
                 "eal": round(r.lc.eal, 2),
                 "eal_tail": round(r.lc.eal_tail, 2),
                 "extrapolated": r.lc.extrapolated,

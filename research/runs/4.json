@@ -1,0 +1,302 @@
+{
+  "n": 4,
+  "subject": "Identify a run and a sweep point by what they read, not what they asked\u2026",
+  "score": 33,
+  "total": 35,
+  "delta": 1,
+  "result": "improved",
+  "duration_s": 591,
+  "tampered": [],
+  "aborted": null,
+  "headline": {
+    "eal": 142705708.53,
+    "eal_pct_of_value": 0.026774,
+    "npv_climate_cost": 3187838178.5,
+    "insured_share": 0.5563,
+    "spread_n": 30,
+    "covenant_breaches": 4
+  },
+  "checks": [
+    {
+      "name": "INT-DOMAIN",
+      "group": "integration",
+      "title": "expected loss integrates the full probability domain",
+      "held": true,
+      "detail": "fixture and 13 live curves match the reference integral",
+      "duration_ms": 0.4
+    },
+    {
+      "name": "INT-STEP",
+      "group": "integration",
+      "title": "a flood defence is a discontinuity, not a ramp",
+      "held": true,
+      "detail": "every defended curve within 2% of its knotted reference",
+      "duration_ms": 0.6
+    },
+    {
+      "name": "INT-CONVERGE-PF",
+      "group": "integration",
+      "title": "portfolio loss is converged on the modelled grid",
+      "held": true,
+      "detail": "portfolio EAL moves -0.00% under 32x refinement",
+      "duration_ms": 327.3
+    },
+    {
+      "name": "INT-CONVERGE-PERIL",
+      "group": "integration",
+      "title": "every peril curve is converged on the modelled grid",
+      "held": true,
+      "detail": "no peril moves more than 5% under 32x refinement",
+      "duration_ms": 267.3
+    },
+    {
+      "name": "INT-DECOMP",
+      "group": "integration",
+      "title": "the loss decomposition reconciles",
+      "held": true,
+      "detail": "eal == body + tail on every curve; tail_share 1.4%",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "INT-MONO-RP",
+      "group": "integration",
+      "title": "loss is non-decreasing in return period",
+      "held": true,
+      "detail": "rarer events are never cheaper, on every curve",
+      "duration_ms": 0.1
+    },
+    {
+      "name": "INT-SCALE",
+      "group": "integration",
+      "title": "loss is exactly linear in asset value",
+      "held": true,
+      "detail": "unit and portfolio both scale exactly 2x",
+      "duration_ms": 0.3
+    },
+    {
+      "name": "INT-BOUNDS",
+      "group": "integration",
+      "title": "losses stay inside their physical bounds",
+      "held": true,
+      "detail": "all damage fractions in [0,1]; all EALs inside asset value",
+      "duration_ms": 0.1
+    },
+    {
+      "name": "INT-MONO-INTENSITY",
+      "group": "integration",
+      "title": "a worse hazard is never a smaller loss",
+      "held": true,
+      "detail": "monotone in intensity on the fixture and every live curve",
+      "duration_ms": 3.3
+    },
+    {
+      "name": "INT-MONO-PROTECTION",
+      "group": "integration",
+      "title": "a taller defence is never a larger loss",
+      "held": true,
+      "detail": "EAL falls monotonically across protection standards: 37,500,000, 10,000,000, 2,000,000, 500,000, 100,000",
+      "duration_ms": 0.7
+    },
+    {
+      "name": "INT-DRY",
+      "group": "integration",
+      "title": "a dry asset costs exactly zero",
+      "held": true,
+      "detail": "exact zero on the fixture and on 2 unexposed assets",
+      "duration_ms": 0.1
+    },
+    {
+      "name": "VUL-OVERLAP",
+      "group": "vulnerability",
+      "title": "an asset cannot be destroyed twice",
+      "held": true,
+      "detail": "combined damage fraction peaks at 0.773",
+      "duration_ms": 3.5
+    },
+    {
+      "name": "VUL-MDF",
+      "group": "vulnerability",
+      "title": "the outage driver is an annual expectation, not a peak",
+      "held": true,
+      "detail": "mean damage fraction equals EAL / value on every curve",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "VUL-BI",
+      "group": "vulnerability",
+      "title": "a loss-making asset has non-zero business interruption",
+      "held": true,
+      "detail": "every exposed revenue-earning asset has positive outage cost",
+      "duration_ms": 0.4
+    },
+    {
+      "name": "VUL-EXTRAP",
+      "group": "vulnerability",
+      "title": "damage never exceeds the curve it came from",
+      "held": true,
+      "detail": "damage is held flat above the last knot, never extrapolated",
+      "duration_ms": 0.1
+    },
+    {
+      "name": "INS-PAYS",
+      "group": "insurance",
+      "title": "a programme with recoverable events pays out",
+      "held": true,
+      "detail": "every asset with recoverable events receives a recovery",
+      "duration_ms": 0.4
+    },
+    {
+      "name": "INS-BOUNDED",
+      "group": "insurance",
+      "title": "recovery cannot exceed the loss or the cover",
+      "held": true,
+      "detail": "recovery bounded by both the loss and the programme limit",
+      "duration_ms": 0.4
+    },
+    {
+      "name": "INS-MONO-DED",
+      "group": "insurance",
+      "title": "a higher deductible never recovers more",
+      "held": true,
+      "detail": "recovery falls monotonically as the deductible rises",
+      "duration_ms": 0.3
+    },
+    {
+      "name": "INS-RECONCILE",
+      "group": "insurance",
+      "title": "the insurance headline reconciles",
+      "held": true,
+      "detail": "insured 55.6%, retained 44.4%, gap reconciles",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "DET-REPEAT",
+      "group": "determinism",
+      "title": "the same inputs give the same answer",
+      "held": true,
+      "detail": "byte-identical across two runs",
+      "duration_ms": 0.4
+    },
+    {
+      "name": "DET-ORDER",
+      "group": "determinism",
+      "title": "asset order cannot change the answer",
+      "held": true,
+      "detail": "headline and rows identical under reversal",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "DET-RUNID",
+      "group": "determinism",
+      "title": "the run id is a function of its inputs",
+      "held": true,
+      "detail": "run id moves when the portfolio moves",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "DET-SCENARIO",
+      "group": "determinism",
+      "title": "a hotter scenario is never cheaper",
+      "held": true,
+      "detail": "ssp585 >= ssp245 >= ssp126 on every asset and at portfolio level",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "AGG-SUM",
+      "group": "coherence",
+      "title": "the whole equals the sum of its parts",
+      "held": true,
+      "detail": "rows, peril shares and bands all reconcile",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "AGG-IN-SWEEP",
+      "group": "coherence",
+      "title": "the headline is a member of its own sweep",
+      "held": true,
+      "detail": "headline matches a sweep point exactly and sits inside the range",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "SWEEP-DISTINCT",
+      "group": "coherence",
+      "title": "every sweep point is a distinct model",
+      "held": false,
+      "detail": "54 sweep points carry only 30 distinct values: duplicated model configurations are biasing the median and inflating n",
+      "duration_ms": 0.1
+    },
+    {
+      "name": "SWEEP-NONDEGEN",
+      "group": "coherence",
+      "title": "real disagreement survives the sweep",
+      "held": true,
+      "detail": "n=30, high/low 3.79",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "BAND-CONSISTENT",
+      "group": "coherence",
+      "title": "risk bands match the numbers they label",
+      "held": true,
+      "detail": "3 bands occupied, every row correctly labelled",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "COV-ATTRIBUTABLE",
+      "group": "coherence",
+      "title": "a reported breach is caused by climate",
+      "held": false,
+      "detail": "1 of 4 reported breaches already breach at zero climate loss: hcmc-tower (dscr_before 0.73, ltv_before 0.70)",
+      "duration_ms": 0.1
+    },
+    {
+      "name": "FIN-ZERO",
+      "group": "coherence",
+      "title": "no hazard means no financial effect",
+      "held": true,
+      "detail": "zero hazard produces zero cost, zero impairment and no LTV movement",
+      "duration_ms": 0.3
+    },
+    {
+      "name": "PLAUS-PORTFOLIO",
+      "group": "anchors",
+      "title": "portfolio loss is physically plausible",
+      "held": true,
+      "detail": "portfolio EAL 2.6774% of value",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "PLAUS-MEDIAN",
+      "group": "anchors",
+      "title": "the median asset is not a write-off",
+      "held": true,
+      "detail": "median asset loses 0.2506% a year",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "PLAUS-CONCENTRATION",
+      "group": "anchors",
+      "title": "losses are not universal",
+      "held": true,
+      "detail": "1 of 12 assets above 5% of value",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "PLAUS-COVERAGE",
+      "group": "anchors",
+      "title": "the model is still modelling something",
+      "held": true,
+      "detail": "8 assets with loss across 4 perils",
+      "duration_ms": 0.0
+    },
+    {
+      "name": "API-SHAPE",
+      "group": "anchors",
+      "title": "the public surface is unchanged",
+      "held": true,
+      "detail": "five entry points and the Assumptions field set unchanged",
+      "duration_ms": 0.1
+    }
+  ],
+  "at": "2026-09-02T23:29:56.104096+00:00"
+}

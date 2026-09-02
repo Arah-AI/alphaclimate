@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
@@ -219,35 +220,94 @@ def _asset_eal(a: pf.Asset, scenario: str, variant_rank: int, curve_rank: int) -
                if not r.permanent)
 
 
-def portfolio_spread(assets: Iterable[pf.Asset]):
-    """EAL across every scenario, climate model and curve choice.
+def _pathway(scenario: str) -> str:
+    """The emissions pathway the hazard store actually serves for a scenario.
 
-    Three independent drivers, swept fully. This is the headline spread and the
-    number the product is really selling.
+    `hz.scenario_substitution()` discloses that WRI ships no RCP2.6, so both
+    ssp126 and ssp245 are served the rcp4p5 layers. They are one pathway
+    wearing two labels; sweeping both counts that pathway twice.
+    """
+    sub = hz.scenario_substitution().get(scenario) or {}
+    served = sorted({v for k, v in sub.items() if k != "note"})
+    return "+".join(served) if served else scenario
+
+
+def portfolio_spread(assets: Iterable[pf.Asset]):
+    """EAL across every distinct model the store and the curve library hold.
+
+    Three axes are requested - scenario, climate model, vulnerability curve -
+    but a rank on an axis is a request, not a model. The store does not answer
+    every request with a different dataset:
+
+      * `hz.variants("inundation_riverine")` lists WATCH first, which is the
+        observational baseline and exists under no future scenario, so
+        `hz.read` falls back and ranks 0 and 1 both return NorESM1-M;
+      * ssp126 and ssp245 are both served the rcp4p5 layers (see `_pathway`);
+      * an occupancy with two damage curves clamps curve rank 2 onto rank 1.
+
+    A sweep point is therefore identified by what it read - the source path and
+    curve id behind every peril of every asset - and a configuration already
+    swept is not swept again. It is the same ensemble either way; the duplicates
+    only pulled the median towards whichever member happened to be repeated and
+    inflated the n the range is reported with.
     """
     values: list[float] = []
     drivers: list[dict] = []
+    seen: set[tuple] = set()
     assets = list(assets)
     n_variants = max((len(hz.variants(p)) for p in hz.PERILS), default=1)
     for sc in SPREAD_SCENARIOS:
         for vrank in range(max(1, n_variants)):
             for crank in range(3):
-                total = sum(_asset_eal(a, sc, vrank, crank) for a in assets)
-                if total <= 0:
+                config: list[tuple] = []
+                models: set[str] = set()
+                curve_ids: set[str] = set()
+                eals: list[float] = []
+                for a in assets:
+                    for r in _asset_perils(a, sc, vrank, crank):
+                        config.append((a.id, r.peril, r.reading.path, r.curve["id"]))
+                        models.add(r.reading.variant)
+                        curve_ids.add(r.curve["id"])
+                        if not r.permanent:
+                            eals.append(r.lc.eal)
+                # fsum, not sum: a running total is only associative to within a
+                # rounding error, and one ulp on the low end of the range is
+                # enough to make the reported spread depend on the order the
+                # assets were listed in.
+                total = math.fsum(sorted(eals))
+                key = (_pathway(sc), tuple(sorted(config)))
+                if total <= 0 or key in seen:
                     continue
+                seen.add(key)
                 values.append(total)
+                # The driver levels are the models themselves, so the
+                # attribution counts the alternatives that exist rather than
+                # the ranks that were asked for.
                 drivers.append({
-                    "scenario": sc,
-                    "climate_model": f"variant{vrank}",
-                    "vulnerability_curve": f"rank{crank}",
+                    "scenario": _pathway(sc),
+                    "climate_model": "+".join(sorted(models)),
+                    "vulnerability_curve": "+".join(sorted(curve_ids)),
                 })
     return spread(values, drivers)
 
 
-def _run_id(portfolio_id: str, scenario: str, a: Assumptions) -> str:
-    """Deterministic: the same inputs must produce the same run id."""
+def _run_id(assets: list[pf.Asset], scenario: str, a: Assumptions) -> str:
+    """Deterministic, and a function of the portfolio it identifies.
+
+    It hashed the portfolio's *id* before, so re-valuing every asset, moving a
+    site or adding one left the id of the run that no longer describes them.
+    The report calls this "a hash of the portfolio" on its provenance page; now
+    it is one. The asset digests are sorted, because the portfolio is a set of
+    assets and not the order someone happened to list them in.
+    """
     blob = json.dumps(
-        {"p": portfolio_id, "s": scenario, "a": a.as_dict(), "e": ENGINE_VERSION},
+        {
+            "p": pf.DEMO_PORTFOLIO["id"],
+            "assets": sorted(json.dumps(x.as_dict(), sort_keys=True) for x in assets),
+            "s": scenario,
+            "a": a.as_dict(),
+            "e": ENGINE_VERSION,
+        },
         sort_keys=True,
     )
     return "run_" + hashlib.sha256(blob.encode()).hexdigest()[:12]
@@ -266,7 +326,9 @@ def _provenance(scenario: str, a: Assumptions, results: list[PerilResult]) -> di
     curve_src = sorted({curve_lib.citation(r.curve) for r in results})
     st = hz.status()
     return {
-        "run_id": _run_id("demo", scenario, a),
+        # The id names the run, so it hashes the portfolio the run was over,
+        # not the one asset a detail page happens to be showing.
+        "run_id": _run_id(list(pf.DEMO_ASSETS), scenario, a),
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "engine_version": ENGINE_VERSION,
         "scenario": scenario,
@@ -570,20 +632,10 @@ def asset_detail(asset_id: str, scenario: str = "ssp585",
         )
         options.append(appraise(sized, eal, mdf, fin_in, a))
 
-    # Per-asset spread, same sweep as the portfolio but for one site.
-    vals, drv = [], []
-    n_variants = max((len(hz.variants(p)) for p in hz.PERILS), default=1)
-    for sc in SPREAD_SCENARIOS:
-        for vrank in range(max(1, n_variants)):
-            for crank in range(3):
-                v = _asset_eal(asset, sc, vrank, crank)
-                if v > 0:
-                    vals.append(v)
-                    drv.append({
-                        "scenario": sc,
-                        "climate_model": f"variant{vrank}",
-                        "vulnerability_curve": f"rank{crank}",
-                    })
+    # Per-asset spread: literally the portfolio sweep over a portfolio of one,
+    # so a site's range and the range it contributes to cannot be built from
+    # different sets of models.
+    site_spread = portfolio_spread([asset])
 
     # Hazards we can measure but will not monetise: no defensible damage curve
     # exists. Shown so the user sees what is real and unpriced, rather than
@@ -643,7 +695,7 @@ def asset_detail(asset_id: str, scenario: str = "ssp585",
         ],
         "finance": fin.as_dict(),
         "adaptation": options,
-        "spread": spread(vals, drv).as_dict(),
+        "spread": site_spread.as_dict(),
         "provenance": _provenance(scenario, a, results),
     }
 
@@ -667,6 +719,27 @@ def demo() -> None:
     assert h["bands"]["severe"] < h["asset_count"], \
         "every asset landed in 'severe' - that is a modelling failure, not a result"
 
+    # Every point behind the reported range is a different model. The rank
+    # axes over-count: 3 scenarios x 6 variants x 3 curves is 54 requests, and
+    # the store answers them with 30 datasets.
+    sp = h["eal_spread"]
+    ranks = max((len(hz.variants(p)) for p in hz.PERILS), default=1)
+    requests = len(SPREAD_SCENARIOS) * max(1, ranks) * 3
+    assert 0 < sp["n"] < requests, (
+        f"{sp['n']} models from {requests} rank combinations: every rank "
+        f"answered with its own dataset, which the store cannot do. WATCH has "
+        f"no future files and ssp126 is served rcp4p5.")
+    assert sp["by_driver"]["climate_model"]["levels"] <= ranks
+
+    # The run id names the portfolio it was computed over.
+    assume = Assumptions.merged(None)
+    assets = list(pf.DEMO_ASSETS)
+    moved = [pf.Asset(**{**x.as_dict(), "value": 1.0}) for x in assets[:1]] + assets[1:]
+    assert _run_id(moved, "ssp585", assume) != _run_id(assets, "ssp585", assume), \
+        "re-valuing an asset must move the run id"
+    assert (_run_id(list(reversed(assets)), "ssp585", assume)
+            == _run_id(assets, "ssp585", assume)), "listing order is not an input"
+
     # Defences must actually be reaching the engine.
     cov = s["provenance"]["flood_protection"]
     assert cov["defended_points"] > 0, "no asset is picking up a FLOPROS standard"
@@ -680,7 +753,10 @@ def demo() -> None:
               f"{PERMANENT_INUNDATION_NOTE}")
 
     print(f"compute.py self-check passed (EAL {h['eal_pct_of_value']:.3%} of value, "
-          f"bands {h['bands']}, {cov['defended_points']} defended points)")
+          f"bands {h['bands']}, {cov['defended_points']} defended points, "
+          f"{sp['n']} distinct models from {requests} rank combinations: "
+          + ", ".join(f"{k.replace('_', ' ')} x{v['levels']}"
+                      for k, v in sorted(sp["by_driver"].items())) + ")")
 
 
 if __name__ == "__main__":

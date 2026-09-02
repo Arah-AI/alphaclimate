@@ -19,7 +19,15 @@ from . import curves as curve_lib
 from . import hazard as hz
 from . import portfolio as pf
 from . import protection as prot
-from .engine import LossCurve, Regime, classify_regime, interp_damage, loss_curve, spread
+from .engine import (
+    LossCurve,
+    Regime,
+    classify_regime,
+    combine_exceedance,
+    interp_damage,
+    loss_curve,
+    spread,
+)
 from .finance import (
     AdaptationOption,
     Assumptions,
@@ -91,77 +99,124 @@ def _measured(r: PerilResult) -> list[int]:
     return [j for j, rp in enumerate(r.lc.return_periods) if rp in keep]
 
 
-def _asset_perils(a: pf.Asset, scenario: str) -> list[PerilResult]:
-    """Best-estimate result per peril for one asset."""
+def _depth_valued(peril: str) -> bool:
+    """Perils whose intensity is a water depth, so a regime question applies."""
+    return peril.startswith("inundation") or peril == "combined_flood"
+
+
+def _result(a: pf.Asset, peril: str, reading: hz.Reading, curve: dict,
+            protection_rp: float | None, regime: Regime | None) -> PerilResult:
+    lc = loss_curve(
+        reading.return_periods,
+        reading.intensities,
+        curve["x"],
+        curve["y"],
+        a.value,
+        curve.get("calibration_range"),
+        protection_rp,
+    )
+    return PerilResult(peril, reading, curve, lc, regime, a.value)
+
+
+def _merged_flood(floods: list[tuple[str, hz.Reading, dict, float | None]]) -> hz.Reading:
+    """Every event-regime flood source at a site, as one hazard reading.
+
+    The site has one water level, however many layers describe it. Each source
+    carries its own standard of protection into the combination, because a
+    river levee holds back the river and not the sea; the combined reading is
+    therefore already defended and is integrated undefended.
+    """
+    rps, ints = combine_exceedance(
+        [(r.return_periods, r.intensities, sop) for _, r, _, sop in floods]
+    )
+    reads = [r for _, r, _, _ in floods]
+
+    def join(vals) -> str:
+        return " + ".join(sorted({v for v in vals if v}))
+
+    return hz.Reading(
+        peril="combined_flood",
+        return_periods=rps,
+        intensities=ints,
+        units=reads[0].units,
+        dataset=join(r.dataset for r in reads),
+        path=join(r.path for r in reads),
+        resolution=join(r.resolution for r in reads),
+        variant=join(r.variant for r in reads),
+    )
+
+
+def _asset_perils(a: pf.Asset, scenario: str, variant_rank: int = 0,
+                  curve_rank: int = 0) -> list[PerilResult]:
+    """Result per peril for one asset under one (scenario, model, curve) choice.
+
+    The headline and the sweep both come through here. They used to be two
+    functions over the same model, which is how the detail page ended up
+    billing standing water annually while the summary did not: any screen added
+    to one had to be remembered in the other. Rank 0 on both axes is the
+    best-estimate configuration the headline reports.
+    """
     out: list[PerilResult] = []
-    for peril in hz.PERILS:
-        if not curve_lib.family_for(peril):
-            continue
-        reading = hz.read(a.lon, a.lat, peril, scenario)
-        if reading is None or not reading.return_periods:
-            continue
-        if max(reading.intensities) <= 0:
-            continue  # genuinely no exposure, not a modelling failure
-        curve = curve_lib.best(peril, a.region, a.occupancy)
-        if curve is None:
-            continue
-        lc = loss_curve(
-            reading.return_periods,
-            reading.intensities,
-            curve["x"],
-            curve["y"],
-            a.value,
-            curve.get("calibration_range"),
-            prot.sop(a.lon, a.lat, peril),
-        )
-        # Depth-valued hazards can be describing standing water rather than
-        # floods. Classify before the number is used as an annual loss.
-        regime = (
-            classify_regime(reading.return_periods, reading.intensities)
-            if peril.startswith("inundation") or peril == "combined_flood"
-            else None
-        )
-        out.append(PerilResult(peril, reading, curve, lc, regime, a.value))
-    return out
+    floods: list[tuple[str, hz.Reading, dict, float | None]] = []
 
-
-def _asset_eal(a: pf.Asset, scenario: str, variant_rank: int, curve_rank: int) -> float:
-    """Total EAL for one asset under one (scenario, model, curve) combination."""
-    total = 0.0
     for peril in hz.PERILS:
         if not curve_lib.family_for(peril):
             continue
         reading = hz.read(a.lon, a.lat, peril, scenario, variant_rank)
         if reading is None or not reading.return_periods:
             continue
-        # Same screen as the headline path. Without it, an asset with no
-        # measured depth still picks up loss from a lower-ranked HAZUS curve
-        # whose x axis is depth above FIRST FLOOR, not above ground: its
-        # damage fraction at 0.0 is non-zero, so a dry site gets charged.
-        # The headline dropped those assets and the sweep did not, which is how
-        # a zero expected loss ended up sitting next to a non-zero spread band.
+        # An asset with no measured depth must not pick up loss from a
+        # lower-ranked HAZUS curve whose x axis is depth above FIRST FLOOR, not
+        # above ground: its damage fraction at 0.0 is non-zero, so a dry site
+        # gets charged.
         if max(reading.intensities) <= 0:
-            continue
+            continue  # genuinely no exposure, not a modelling failure
         alts = curve_lib.alternates(peril, a.region, a.occupancy, limit=3)
         if not alts:
             continue
-        # Same exclusion as the headline: standing water is a write-down, not an
-        # annual loss. Leaving it in here would make the spread band fail to
-        # bracket the median it is supposed to describe.
-        if peril.startswith("inundation") or peril == "combined_flood":
-            if classify_regime(reading.return_periods, reading.intensities).permanent:
-                continue
         curve = alts[min(curve_rank, len(alts) - 1)]
-        total += loss_curve(
-            reading.return_periods,
-            reading.intensities,
-            curve["x"],
-            curve["y"],
-            a.value,
-            curve.get("calibration_range"),
-            prot.sop(a.lon, a.lat, peril),
-        ).eal
-    return total
+        sop = prot.sop(a.lon, a.lat, peril)
+
+        if not _depth_valued(peril):
+            out.append(_result(a, peril, reading, curve, sop, None))
+            continue
+        # Depth-valued hazards can be describing standing water rather than
+        # floods. Classify before the number is used as an annual loss, and
+        # keep standing water out of the combination: it is a write-down, and
+        # it has no rate of occurrence to add.
+        regime = classify_regime(reading.return_periods, reading.intensities)
+        if regime.permanent:
+            out.append(_result(a, peril, reading, curve, sop, regime))
+        else:
+            floods.append((peril, reading, curve, sop))
+
+    if len(floods) == 1:
+        peril, reading, curve, sop = floods[0]
+        out.append(_result(a, peril, reading, curve, sop,
+                           classify_regime(reading.return_periods, reading.intensities)))
+    elif floods:
+        # Coastal and riverine are two ways for the same site to end up under
+        # the same water. Summing their damage fractions destroys the asset
+        # more than once; the sources are combined into one hazard curve and
+        # the vulnerability curve is applied to it once.
+        reading = _merged_flood(floods)
+        alts = curve_lib.alternates("combined_flood", a.region, a.occupancy, limit=3)
+        curve = alts[min(curve_rank, len(alts) - 1)] if alts else floods[0][2]
+        out.append(_result(a, "combined_flood", reading, curve, None,
+                           classify_regime(reading.return_periods, reading.intensities)))
+    return out
+
+
+def _asset_eal(a: pf.Asset, scenario: str, variant_rank: int, curve_rank: int) -> float:
+    """Total EAL for one asset under one (scenario, model, curve) combination.
+
+    Permanent inundation is excluded here as it is in the headline: standing
+    water is a write-down, not an annual loss, and leaving it in would make the
+    spread band fail to bracket the median it is supposed to describe.
+    """
+    return sum(r.lc.eal
+               for r in _asset_perils(a, scenario, variant_rank, curve_rank)
+               if not r.permanent)
 
 
 def portfolio_spread(assets: Iterable[pf.Asset]):

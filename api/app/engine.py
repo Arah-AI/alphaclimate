@@ -123,6 +123,108 @@ def _integration_grid(
     return grid, [_interp_log_rp(r, rps, ints) for r in grid]
 
 
+def _rate_above(
+    level: float,
+    rps: Sequence[float],
+    ints: Sequence[float],
+    protection_rp: float | None = None,
+) -> float:
+    """Annual rate at which one hazard source exceeds `level` at a site.
+
+    The inverse of `_interp_log_rp`: the same log-RP-linear curve read the other
+    way round. Below the shallowest modelled intensity the rate is held at the
+    most frequent modelled return period and above the deepest it is zero, for
+    the same reason the forward reading is held flat - outside its range the
+    layer says nothing, and inventing a slope there is the extrapolation this
+    engine exists to expose.
+
+    A standard of protection caps the rate. Events more frequent than the
+    standard are held back, so the site cannot see water from this source more
+    often than once in `protection_rp` years. That is the same defence the loss
+    integration applies as a step, expressed on the axis the sources are
+    combined on.
+    """
+    if not rps or not ints:
+        return 0.0
+    if level > ints[-1]:
+        rate = 0.0
+    elif level <= ints[0]:
+        rate = 1.0 / rps[0]
+    else:
+        rate = 1.0 / rps[-1]
+        for i in range(1, len(ints)):
+            if level <= ints[i]:
+                lo, hi = ints[i - 1], ints[i]
+                w = 0.0 if hi == lo else (level - lo) / (hi - lo)
+                la, lb = math.log(rps[i - 1]), math.log(rps[i])
+                rate = 1.0 / math.exp(la + (lb - la) * w)
+                break
+    if protection_rp:
+        rate = min(rate, 1.0 / protection_rp)
+    return rate
+
+
+def combine_exceedance(
+    sources: Sequence[tuple[Sequence[float], Sequence[float], float | None]],
+) -> tuple[list[float], list[float]]:
+    """One site-level hazard curve from several sources of the same hazard.
+
+    Each source is `(return_periods, intensities, protection_rp)`.
+
+    Two flood sources at one site are two ways for the same site to end up under
+    the same water, not two assets to damage. Their damage fractions describe
+    one building and cannot be added: do that and a site with a 0.56 coastal
+    fraction and a 1.00 riverine one is destroyed 1.56 times. The combination
+    belongs at the hazard level, before the vulnerability curve is applied once.
+
+    FEMA's procedure for a point in a mixed surge/runoff reach (Guidance
+    Document 76, "Combined Effects: Surge Plus Riverine Runoff") is exactly
+    this: at each flood level Z, add the sources' rates of occurrence of
+    exceeding Z,
+
+        R_T(Z) = R_riverine(Z) + R_surge(Z)
+
+    and read the combined level off at the rate of interest. Rates add because
+    the sources are taken as independent and non-concurrent, which FEMA notes
+    is acceptable where the storms driving surge are not the storms driving
+    runoff. A defence enters as a cap on its own source's rate, because a river
+    levee holds back the river and not the sea.
+
+    Returns the combined curve on the union of the sources' return periods.
+    """
+    srcs = [(list(r), list(i), p) for r, i, p in sources if r and i]
+    if not srcs:
+        return [], []
+    if len(srcs) == 1:
+        return srcs[0][0], srcs[0][1]
+
+    # The combined curve is defined level by level: every level either source
+    # models is a knot. Where two levels carry the same combined rate the
+    # deeper one is the exceedance level, because no probability mass sits
+    # between them.
+    by_rate: dict[float, float] = {}
+    for z in sorted({float(v) for _, ints, _ in srcs for v in ints}):
+        rate = sum(_rate_above(z, r, i, p) for r, i, p in srcs)
+        if rate > 0:
+            by_rate[rate] = max(by_rate.get(rate, z), z)
+    if not by_rate:
+        return [], []
+    pairs = sorted((1.0 / rate, z) for rate, z in by_rate.items())
+    comb_rps = [p[0] for p in pairs]
+    comb_ints = [p[1] for p in pairs]
+
+    grid = sorted({float(rp) for r, _, _ in srcs for rp in r})
+    if comb_rps[0] > grid[0]:
+        # Every source is defended past the most frequent modelled event, so
+        # the site sees nothing at all below the combined standard. That is a
+        # step; carry a zero knot immediately below it rather than a ramp.
+        knot = comb_rps[0] * (1.0 - 1e-9)
+        grid = sorted(set(grid) | {knot, comb_rps[0]})
+        comb_rps.insert(0, knot)
+        comb_ints.insert(0, 0.0)
+    return grid, [_interp_log_rp(rp, comb_rps, comb_ints) for rp in grid]
+
+
 @dataclass
 class LossCurve:
     """Losses at a set of return periods, plus the integrated summary."""
@@ -452,6 +554,40 @@ def demo() -> None:
     assert loss_curve(rps, ints, cx, cy, 1e7, protection_rp=1e6).eal == 0.0, \
         "a standard beyond every modelled RP leaves no loss at all"
     assert defended.eal > 0, "a 1-in-100 defence is not immunity"
+
+    # Combining sources. One source in, the same curve out.
+    assert combine_exceedance([(rps, ints, None)]) == (rps, ints)
+    assert combine_exceedance([]) == ([], [])
+
+    # Two identical independent sources flood the site twice as often, so the
+    # combined 1-in-T level is one source's 1-in-2T level. Exactly, because
+    # halving a rate is a constant shift in the log-RP space both curves live in.
+    cr, ci = combine_exceedance([(rps, ints, None), (rps, ints, None)])
+    assert cr == rps, "the combined curve is reported on the sources' own grid"
+    for rp, got in zip(cr, ci):
+        assert abs(got - _interp_log_rp(2 * rp, rps, ints)) < 1e-9, \
+            f"combined 1-in-{rp:g} should be the source 1-in-{2 * rp:g}: {got}"
+    assert ci == sorted(ci), "the combined curve must still rise with rarity"
+
+    # And it is a hazard combination, not a damage sum: the combined level can
+    # never exceed what one source alone reaches at its rarest modelled event.
+    assert ci[-1] <= ints[-1] + 1e-12, "combining sources invented new depth"
+
+    # A thousand-times rarer second source barely moves a dominant first one.
+    # Note "weak" has to mean rare, not shallow: a source that floods just as
+    # often but only ankle-deep still doubles the rate at the shallow end.
+    weak = combine_exceedance([(rps, ints, None),
+                               ([r * 1000 for r in rps], ints, None)])[1]
+    assert all(abs(w - x) < 0.02 * max(x, 0.1) for w, x in zip(weak, ints)), \
+        f"a negligible source must not shift the combined curve: {weak}"
+
+    # A defence caps its own source's rate and nothing else. Defending the
+    # second source to 1-in-500 leaves it contributing almost nothing, so the
+    # combination collapses back towards the undefended first source.
+    held = combine_exceedance([(rps, ints, None), (rps, ints, 500)])[1]
+    assert all(h >= x - 1e-9 for h, x in zip(held, ints)), "a second source only adds"
+    assert all(h <= c + 1e-9 for h, c in zip(held, ci)), \
+        "defending a source cannot make the combination worse"
 
     # Regime classification: the Jakarta signature must read as permanent.
     jakarta = classify_regime([2, 5, 10, 25, 50, 100, 250, 500, 1000],
